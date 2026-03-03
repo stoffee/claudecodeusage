@@ -52,10 +52,23 @@ class UsageManager: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let token = try await getAccessToken()
-            let data = try await fetchUsage(token: token)
-            usage = data
-            lastUpdated = Date()
+            var token = try await getAccessToken()
+            do {
+                let data = try await fetchUsage(token: token)
+                usage = data
+                lastUpdated = Date()
+            } catch UsageError.apiError(statusCode: 401) {
+                // Token might be stale even if not past expiresAt - force refresh
+                let creds = try readKeychainCredentials()
+                if let refreshToken = creds.refreshToken {
+                    token = try await refreshAccessToken(refreshToken: refreshToken)
+                    let data = try await fetchUsage(token: token)
+                    usage = data
+                    lastUpdated = Date()
+                } else {
+                    throw UsageError.apiError(statusCode: 401)
+                }
+            }
         } catch let keychainError as KeychainError {
             // Retry on keychain errors that may resolve after unlock
             if retriesRemaining > 0 && keychainError.isRetryable {
@@ -77,17 +90,96 @@ class UsageManager: ObservableObject {
         }
     }
 
+    private static let oauthClientId = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+    private static let oauthTokenURL = "https://platform.claude.com/v1/oauth/token"
+
     private func getAccessToken() async throws -> String {
-        // Get token from Claude Code's keychain via security CLI
-        return try getClaudeCodeToken()
+        let creds = try readKeychainCredentials()
+
+        // Check if the access token is expired
+        if let expiresAt = creds.expiresAt, Date().timeIntervalSince1970 * 1000 >= Double(expiresAt) {
+            // Token expired - refresh it
+            if let refreshToken = creds.refreshToken {
+                return try await refreshAccessToken(refreshToken: refreshToken)
+            }
+            throw KeychainError.invalidCredentialFormat
+        }
+
+        return creds.accessToken
     }
 
-    /// Get token from Claude Code's keychain using security CLI (avoids ACL prompt!)
-    private func getClaudeCodeToken() throws -> String {
-        // Use security CLI which is already in the keychain ACL
+    private struct OAuthCredentials {
+        let accessToken: String
+        let refreshToken: String?
+        let expiresAt: Int64? // milliseconds since epoch
+    }
+
+    /// Read credentials from Claude Code's keychain using security CLI
+    /// Tries multiple account names since Claude Code may store under different accounts
+    private func readKeychainCredentials() throws -> OAuthCredentials {
+        // Try account-specific entries first (Claude Code stores under the OS username)
+        let accounts = [NSUserName(), "root", ""]
+        var jsonString: String? = nil
+
+        for account in accounts {
+            if let entry = try readKeychainEntry(service: "Claude Code-credentials", account: account.isEmpty ? nil : account) {
+                // Validate this entry has a non-expired token or at least a refresh token
+                if let data = entry.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let oauth = json["claudeAiOauth"] as? [String: Any],
+                   oauth["accessToken"] != nil {
+                    let expiresAt = oauth["expiresAt"] as? Int64 ?? 0
+                    let isExpired = Date().timeIntervalSince1970 * 1000 >= Double(expiresAt)
+                    // Prefer non-expired tokens, but accept expired if it has a refresh token
+                    if !isExpired {
+                        jsonString = entry
+                        break
+                    } else if oauth["refreshToken"] != nil && jsonString == nil {
+                        jsonString = entry
+                        // Keep looking for a non-expired one
+                    }
+                }
+            }
+        }
+
+        // Fallback: try alternate service name
+        if jsonString == nil {
+            jsonString = try readKeychainEntry(service: "Claude Code", account: nil)
+        }
+
+        guard let jsonString = jsonString else {
+            throw KeychainError.notLoggedIn
+        }
+
+        guard let jsonData = jsonString.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+              let oauth = json["claudeAiOauth"] as? [String: Any],
+              let accessToken = oauth["accessToken"] as? String else {
+            if let jsonData = jsonString.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+                let keys = Array(json.keys).joined(separator: ", ")
+                throw KeychainError.missingOAuthToken(availableKeys: keys)
+            }
+            throw KeychainError.invalidCredentialFormat
+        }
+
+        return OAuthCredentials(
+            accessToken: accessToken,
+            refreshToken: oauth["refreshToken"] as? String,
+            expiresAt: oauth["expiresAt"] as? Int64
+        )
+    }
+
+    /// Read a single keychain entry by service name and optional account, returns nil if not found
+    private func readKeychainEntry(service: String, account: String? = nil) throws -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        process.arguments = ["find-generic-password", "-s", "Claude Code-credentials", "-w"]
+        var args = ["find-generic-password", "-s", service]
+        if let account = account {
+            args += ["-a", account]
+        }
+        args.append("-w")
+        process.arguments = args
 
         let pipe = Pipe()
         let errorPipe = Pipe()
@@ -106,77 +198,90 @@ class UsageManager: ObservableObject {
         let errorString = String(data: errorData, encoding: .utf8) ?? ""
 
         guard process.terminationStatus == 0 else {
-            // Try alternate keychain entry as fallback
-            if let token = try? getAccessTokenFromAlternateKeychain() {
-                return token
-            }
-            // Include error detail for debugging
             if errorString.contains("could not be found") {
-                throw KeychainError.notLoggedIn
+                return nil
             }
             throw KeychainError.securityCommandFailed(errorString.isEmpty ? "Exit code \(process.terminationStatus)" : errorString)
         }
 
-        guard let jsonString = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !jsonString.isEmpty else {
-            if let token = try? getAccessTokenFromAlternateKeychain() {
-                return token
-            }
-            throw KeychainError.notLoggedIn
-        }
-
-        // Try to parse as OAuth credentials
-        if let jsonData = jsonString.data(using: .utf8),
-           let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
-            // Check for claudeAiOauth structure
-            if let oauth = json["claudeAiOauth"] as? [String: Any],
-               let accessToken = oauth["accessToken"] as? String {
-                return accessToken
-            }
-            // Show what keys ARE present for debugging
-            let keys = Array(json.keys).joined(separator: ", ")
-            throw KeychainError.missingOAuthToken(availableKeys: keys)
-        }
-
-        // Primary entry doesn't have OAuth - try alternate keychain
-        if let token = try? getAccessTokenFromAlternateKeychain() {
-            return token
-        }
-
-        throw KeychainError.invalidCredentialFormat
+        let result = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (result?.isEmpty == true) ? nil : result
     }
 
-    /// Fallback: Check for "Claude Code" keychain entry (alternate storage location)
-    private func getAccessTokenFromAlternateKeychain() throws -> String {
-        // Use security CLI which is already in the keychain ACL
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        process.arguments = ["find-generic-password", "-s", "Claude Code", "-w"]
+    /// Refresh the OAuth access token and update the keychain
+    private func refreshAccessToken(refreshToken: String) async throws -> String {
+        var request = URLRequest(url: URL(string: Self.oauthTokenURL)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
+        let body: [String: String] = [
+            "grant_type": "refresh_token",
+            "refresh_token": refreshToken,
+            "client_id": Self.oauthClientId
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        do {
-            try process.run()
-            process.waitUntilExit()
-        } catch {
-            throw KeychainError.notLoggedIn
+        let (data, response) = try await urlSession.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw UsageError.apiError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
         }
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-
-        guard process.terminationStatus == 0,
-              let jsonString = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !jsonString.isEmpty,
-              let jsonData = jsonString.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
-              let oauth = json["claudeAiOauth"] as? [String: Any],
-              let accessToken = oauth["accessToken"] as? String else {
-            throw KeychainError.notLoggedIn
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let newAccessToken = json["access_token"] as? String else {
+            throw UsageError.invalidResponse
         }
 
-        return accessToken
+        // Update keychain with refreshed tokens
+        let newRefreshToken = json["refresh_token"] as? String ?? refreshToken
+        let expiresIn = json["expires_in"] as? Int ?? 28800
+        let newExpiresAt = Int64(Date().timeIntervalSince1970 * 1000) + Int64(expiresIn) * 1000
+
+        updateKeychainCredentials(
+            accessToken: newAccessToken,
+            refreshToken: newRefreshToken,
+            expiresAt: newExpiresAt
+        )
+
+        return newAccessToken
+    }
+
+    /// Write updated OAuth credentials back to the keychain
+    private func updateKeychainCredentials(accessToken: String, refreshToken: String, expiresAt: Int64) {
+        // Read the full current keychain JSON so we preserve other keys
+        guard let currentJson = try? readKeychainEntry(service: "Claude Code-credentials"),
+              let jsonData = currentJson.data(using: .utf8),
+              var json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+              var oauth = json["claudeAiOauth"] as? [String: Any] else {
+            return
+        }
+
+        oauth["accessToken"] = accessToken
+        oauth["refreshToken"] = refreshToken
+        oauth["expiresAt"] = expiresAt
+        json["claudeAiOauth"] = oauth
+
+        guard let updatedData = try? JSONSerialization.data(withJSONObject: json),
+              let updatedString = String(data: updatedData, encoding: .utf8) else {
+            return
+        }
+
+        // Use security CLI to update the keychain entry
+        let deleteProcess = Process()
+        deleteProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        deleteProcess.arguments = ["delete-generic-password", "-s", "Claude Code-credentials"]
+        deleteProcess.standardOutput = FileHandle.nullDevice
+        deleteProcess.standardError = FileHandle.nullDevice
+        try? deleteProcess.run()
+        deleteProcess.waitUntilExit()
+
+        let addProcess = Process()
+        addProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        addProcess.arguments = ["add-generic-password", "-s", "Claude Code-credentials", "-w", updatedString, "-U"]
+        addProcess.standardOutput = FileHandle.nullDevice
+        addProcess.standardError = FileHandle.nullDevice
+        try? addProcess.run()
+        addProcess.waitUntilExit()
     }
 
     private func fetchUsage(token: String) async throws -> UsageData {
