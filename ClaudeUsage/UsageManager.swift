@@ -60,8 +60,8 @@ class UsageManager: ObservableObject {
             } catch UsageError.apiError(statusCode: 401) {
                 // Token might be stale even if not past expiresAt - force refresh
                 let creds = try readKeychainCredentials()
-                if let refreshToken = creds.refreshToken {
-                    token = try await refreshAccessToken(refreshToken: refreshToken)
+                if creds.refreshToken != nil {
+                    token = try await refreshAccessToken(credentials: creds)
                     let data = try await fetchUsage(token: token)
                     usage = data
                     lastUpdated = Date()
@@ -99,8 +99,8 @@ class UsageManager: ObservableObject {
         // Check if the access token is expired
         if let expiresAt = creds.expiresAt, Date().timeIntervalSince1970 * 1000 >= Double(expiresAt) {
             // Token expired - refresh it
-            if let refreshToken = creds.refreshToken {
-                return try await refreshAccessToken(refreshToken: refreshToken)
+            if creds.refreshToken != nil {
+                return try await refreshAccessToken(credentials: creds)
             }
             throw KeychainError.invalidCredentialFormat
         }
@@ -112,6 +112,8 @@ class UsageManager: ObservableObject {
         let accessToken: String
         let refreshToken: String?
         let expiresAt: Int64? // milliseconds since epoch
+        let service: String
+        let account: String?
     }
 
     /// Read credentials from Claude Code's keychain using security CLI
@@ -120,9 +122,12 @@ class UsageManager: ObservableObject {
         // Try account-specific entries first (Claude Code stores under the OS username)
         let accounts = [NSUserName(), "root", ""]
         var jsonString: String? = nil
+        var foundService = "Claude Code-credentials"
+        var foundAccount: String? = nil
 
         for account in accounts {
-            if let entry = try readKeychainEntry(service: "Claude Code-credentials", account: account.isEmpty ? nil : account) {
+            let accountArg: String? = account.isEmpty ? nil : account
+            if let entry = try readKeychainEntry(service: "Claude Code-credentials", account: accountArg) {
                 // Validate this entry has a non-expired token or at least a refresh token
                 if let data = entry.data(using: .utf8),
                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -133,9 +138,11 @@ class UsageManager: ObservableObject {
                     // Prefer non-expired tokens, but accept expired if it has a refresh token
                     if !isExpired {
                         jsonString = entry
+                        foundAccount = accountArg
                         break
                     } else if oauth["refreshToken"] != nil && jsonString == nil {
                         jsonString = entry
+                        foundAccount = accountArg
                         // Keep looking for a non-expired one
                     }
                 }
@@ -144,7 +151,11 @@ class UsageManager: ObservableObject {
 
         // Fallback: try alternate service name
         if jsonString == nil {
-            jsonString = try readKeychainEntry(service: "Claude Code", account: nil)
+            if let entry = try readKeychainEntry(service: "Claude Code", account: nil) {
+                jsonString = entry
+                foundService = "Claude Code"
+                foundAccount = nil
+            }
         }
 
         guard let jsonString = jsonString else {
@@ -166,7 +177,9 @@ class UsageManager: ObservableObject {
         return OAuthCredentials(
             accessToken: accessToken,
             refreshToken: oauth["refreshToken"] as? String,
-            expiresAt: oauth["expiresAt"] as? Int64
+            expiresAt: oauth["expiresAt"] as? Int64,
+            service: foundService,
+            account: foundAccount
         )
     }
 
@@ -209,7 +222,11 @@ class UsageManager: ObservableObject {
     }
 
     /// Refresh the OAuth access token and update the keychain
-    private func refreshAccessToken(refreshToken: String) async throws -> String {
+    private func refreshAccessToken(credentials: OAuthCredentials) async throws -> String {
+        guard let refreshToken = credentials.refreshToken else {
+            throw KeychainError.invalidCredentialFormat
+        }
+
         var request = URLRequest(url: URL(string: Self.oauthTokenURL)!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -240,16 +257,18 @@ class UsageManager: ObservableObject {
         updateKeychainCredentials(
             accessToken: newAccessToken,
             refreshToken: newRefreshToken,
-            expiresAt: newExpiresAt
+            expiresAt: newExpiresAt,
+            service: credentials.service,
+            account: credentials.account
         )
 
         return newAccessToken
     }
 
-    /// Write updated OAuth credentials back to the keychain
-    private func updateKeychainCredentials(accessToken: String, refreshToken: String, expiresAt: Int64) {
+    /// Write updated OAuth credentials back to the same keychain entry that was originally read
+    private func updateKeychainCredentials(accessToken: String, refreshToken: String, expiresAt: Int64, service: String, account: String?) {
         // Read the full current keychain JSON so we preserve other keys
-        guard let currentJson = try? readKeychainEntry(service: "Claude Code-credentials"),
+        guard let currentJson = try? readKeychainEntry(service: service, account: account),
               let jsonData = currentJson.data(using: .utf8),
               var json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
               var oauth = json["claudeAiOauth"] as? [String: Any] else {
@@ -266,18 +285,14 @@ class UsageManager: ObservableObject {
             return
         }
 
-        // Use security CLI to update the keychain entry
-        let deleteProcess = Process()
-        deleteProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        deleteProcess.arguments = ["delete-generic-password", "-s", "Claude Code-credentials"]
-        deleteProcess.standardOutput = FileHandle.nullDevice
-        deleteProcess.standardError = FileHandle.nullDevice
-        try? deleteProcess.run()
-        deleteProcess.waitUntilExit()
-
+        // Use -U flag for atomic update — avoids the delete-then-add race that could wipe credentials
         let addProcess = Process()
         addProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        addProcess.arguments = ["add-generic-password", "-s", "Claude Code-credentials", "-w", updatedString, "-U"]
+        var args = ["add-generic-password", "-s", service, "-w", updatedString, "-U"]
+        if let account = account {
+            args += ["-a", account]
+        }
+        addProcess.arguments = args
         addProcess.standardOutput = FileHandle.nullDevice
         addProcess.standardError = FileHandle.nullDevice
         try? addProcess.run()

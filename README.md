@@ -27,13 +27,42 @@ Built by [@richhickson](https://x.com/richhickson)
 
 ### Build from Source
 
+#### Option 1: Xcode GUI
 ```bash
 git clone https://github.com/YOUR_USERNAME/claude-usage.git
 cd claude-usage
 open ClaudeUsage.xcodeproj
 ```
-
 Then build with ⌘B and run with ⌘R.
+
+#### Option 2: Command Line (macOS 26 / no dev cert)
+
+If you don't have a Mac Development signing certificate, build with ad-hoc signing:
+
+```bash
+xcodebuild \
+  -project ClaudeUsage.xcodeproj \
+  -scheme ClaudeUsage \
+  -configuration Debug \
+  CODE_SIGN_IDENTITY="-" \
+  CODE_SIGNING_REQUIRED=NO \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+```
+
+Then launch the built app:
+```bash
+open ~/Library/Developer/Xcode/DerivedData/ClaudeUsage-*/Build/Products/Debug/ClaudeUsage.app
+```
+
+#### Troubleshooting xcodebuild
+
+If you see `xcodebuild failed to load a required plug-in`, run this once to fix it:
+```bash
+xcodebuild -runFirstLaunch
+```
+
+This is common after a macOS update or fresh Xcode install.
 
 ## Requirements
 

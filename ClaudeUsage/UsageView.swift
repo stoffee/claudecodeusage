@@ -177,21 +177,19 @@ struct UsageView: View {
             .font(.caption)
             .padding(.top, 8)
 
-            Toggle("Launch at Login", isOn: $launchAtLogin)
-                .toggleStyle(.checkbox)
-                .font(.caption)
-                .onChange(of: launchAtLogin) { newValue in
-                    do {
-                        if newValue {
-                            try SMAppService.mainApp.register()
-                        } else {
-                            try SMAppService.mainApp.unregister()
-                        }
-                    } catch {
-                        launchAtLogin = !newValue
-                    }
-                }
-                .padding(.horizontal)
+            if #available(macOS 14.0, *) {
+                Toggle("Launch at Login", isOn: $launchAtLogin)
+                    .toggleStyle(.checkbox)
+                    .font(.caption)
+                    .onChange(of: launchAtLogin) { _, newValue in setLaunchAtLogin(newValue) }
+                    .padding(.horizontal)
+            } else {
+                Toggle("Launch at Login", isOn: $launchAtLogin)
+                    .toggleStyle(.checkbox)
+                    .font(.caption)
+                    .onChange(of: launchAtLogin) { newValue in setLaunchAtLogin(newValue) }
+                    .padding(.horizontal)
+            }
 
             Divider()
 
@@ -243,6 +241,18 @@ struct UsageView: View {
         .background(Color(NSColor.controlBackgroundColor))
     }
     
+    private func setLaunchAtLogin(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            launchAtLogin = !enabled
+        }
+    }
+
     func colorForPercentage(_ pct: Int) -> Color {
         if pct >= 90 { return .red }
         if pct >= 70 { return .orange }
