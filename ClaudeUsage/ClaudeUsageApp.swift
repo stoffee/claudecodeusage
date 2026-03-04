@@ -17,6 +17,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     var popover: NSPopover?
     var usageManager = UsageManager()
+    var sessionManager = SessionManager()
     var timer: Timer?
     var cancellables = Set<AnyCancellable>()
 
@@ -83,24 +84,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
-    
+
     func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem?.button {
-            button.title = "⏳"
+            button.title = "..."
             button.action = #selector(togglePopover)
             button.target = self
         }
     }
-    
+
     func setupPopover() {
         popover = NSPopover()
-        popover?.contentSize = NSSize(width: 280, height: 320)
+        popover?.contentSize = NSSize(width: 340, height: 480)
         popover?.behavior = .transient
-        popover?.contentViewController = NSHostingController(rootView: UsageView(manager: usageManager))
+        popover?.contentViewController = NSHostingController(
+            rootView: UsageView(manager: usageManager, sessionManager: sessionManager)
+        )
     }
-    
+
     func updateStatusItem() {
         guard let button = statusItem?.button else { return }
 
@@ -109,20 +112,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let emoji = usageManager.statusEmoji
             button.title = "\(emoji) \(sessionPct)%"
         } else if usageManager.error != nil {
-            button.title = "❌"
+            button.title = "X"
         } else {
-            button.title = "⏳"
+            button.title = "..."
         }
     }
-    
+
     @objc func togglePopover() {
         guard let button = statusItem?.button, let popover = popover else { return }
-        
+
         if popover.isShown {
             popover.performClose(nil)
         } else {
+            // Refresh sessions each time the popover opens (lightweight local I/O)
+            sessionManager.loadSessions()
+
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            
+
             // Bring to front
             if #available(macOS 14.0, *) {
                 NSApp.activate()

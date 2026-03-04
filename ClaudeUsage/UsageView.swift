@@ -2,16 +2,23 @@ import SwiftUI
 import AppKit
 import ServiceManagement
 
+enum AppTab: String, CaseIterable {
+    case usage = "Usage"
+    case sessions = "Sessions"
+}
+
 struct UsageView: View {
     @ObservedObject var manager: UsageManager
+    @ObservedObject var sessionManager: SessionManager
     @Environment(\.openURL) var openURL
+    @State private var selectedTab: AppTab = .usage
     @State private var launchAtLogin: Bool = {
         if #available(macOS 13.0, *) {
             return SMAppService.mainApp.status == .enabled
         }
         return false
     }()
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -25,14 +32,24 @@ struct UsageView: View {
                     .foregroundColor(.secondary)
                 Spacer()
 
-                if manager.isLoading {
+                if manager.isLoading || sessionManager.isLoading {
                     ProgressView()
                         .scaleEffect(0.7)
                 }
             }
             .padding()
             .background(Color(NSColor.controlBackgroundColor))
-            
+
+            // Tab picker
+            Picker("", selection: $selectedTab) {
+                ForEach(AppTab.allCases, id: \.self) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+
             // Update available banner
             if let newVersion = manager.updateAvailable {
                 Button(action: {
@@ -47,31 +64,43 @@ struct UsageView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(.green)
                 .padding(.horizontal)
-                .padding(.vertical, 8)
+                .padding(.bottom, 8)
             }
 
             Divider()
 
-            if let error = manager.error {
-                errorView(error)
-            } else if let usage = manager.usage {
-                usageContent(usage)
-            } else {
-                loadingView()
+            // Tab content
+            switch selectedTab {
+            case .usage:
+                usageTabContent()
+            case .sessions:
+                sessionsTabContent()
             }
-            
+
             Divider()
-            
+
             // Footer
             footerView()
         }
-        .frame(width: 280)
+        .frame(width: 340)
     }
-    
+
+    // MARK: - Usage Tab
+
+    @ViewBuilder
+    func usageTabContent() -> some View {
+        if let error = manager.error {
+            errorView(error)
+        } else if let usage = manager.usage {
+            usageContent(usage)
+        } else {
+            loadingView()
+        }
+    }
+
     @ViewBuilder
     func usageContent(_ usage: UsageData) -> some View {
         VStack(spacing: 16) {
-            // Session usage
             UsageRow(
                 title: "Session",
                 subtitle: "5-hour window",
@@ -79,8 +108,7 @@ struct UsageView: View {
                 resetsAt: usage.sessionResetsAt,
                 color: colorForPercentage(usage.sessionPercentage)
             )
-            
-            // Weekly usage
+
             UsageRow(
                 title: "Weekly",
                 subtitle: "7-day window",
@@ -88,8 +116,7 @@ struct UsageView: View {
                 resetsAt: usage.weeklyResetsAt,
                 color: colorForPercentage(usage.weeklyPercentage)
             )
-            
-            // Sonnet only (if available)
+
             if let sonnetPct = usage.sonnetPercentage {
                 UsageRow(
                     title: "Sonnet Only",
@@ -102,7 +129,40 @@ struct UsageView: View {
         }
         .padding()
     }
-    
+
+    // MARK: - Sessions Tab
+
+    @ViewBuilder
+    func sessionsTabContent() -> some View {
+        if sessionManager.sessions.isEmpty && !sessionManager.isLoading {
+            VStack(spacing: 12) {
+                Image(systemName: "tray")
+                    .font(.largeTitle)
+                    .foregroundColor(.secondary)
+                Text("No sessions found")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, minHeight: 200)
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    ForEach(sessionManager.sessions) { session in
+                        SessionRow(session: session) {
+                            sessionManager.resumeSession(session)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+            }
+            .frame(minHeight: 200, maxHeight: 320)
+        }
+    }
+
+    // MARK: - Error / Loading
+
     @ViewBuilder
     func errorView(_ error: String) -> some View {
         VStack(spacing: 12) {
@@ -149,7 +209,7 @@ struct UsageView: View {
         .padding()
         .frame(maxWidth: .infinity)
     }
-    
+
     @ViewBuilder
     func loadingView() -> some View {
         VStack(spacing: 12) {
@@ -161,7 +221,9 @@ struct UsageView: View {
         .padding()
         .frame(maxWidth: .infinity)
     }
-    
+
+    // MARK: - Footer
+
     @ViewBuilder
     func footerView() -> some View {
         VStack(spacing: 8) {
@@ -240,7 +302,7 @@ struct UsageView: View {
         }
         .background(Color(NSColor.controlBackgroundColor))
     }
-    
+
     private func setLaunchAtLogin(_ enabled: Bool) {
         do {
             if enabled {
@@ -252,6 +314,8 @@ struct UsageView: View {
             launchAtLogin = !enabled
         }
     }
+
+    // MARK: - Helpers
 
     func colorForPercentage(_ pct: Int) -> Color {
         if pct >= 90 { return .red }
@@ -273,13 +337,71 @@ struct UsageView: View {
     }
 }
 
+// MARK: - Session Row
+
+struct SessionRow: View {
+    let session: SessionEntry
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(session.displayTitle)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(2)
+                    .foregroundColor(.primary)
+
+                HStack(spacing: 8) {
+                    // Project name
+                    Label(session.shortProjectName, systemImage: "folder")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+
+                    // Git branch
+                    if let branch = session.branchDisplay {
+                        Label(branch, systemImage: "arrow.triangle.branch")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    // Message count
+                    if let count = session.messageCount, count > 0 {
+                        Label("\(count)", systemImage: "message")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                // Relative time
+                if !session.relativeModified.isEmpty {
+                    Text(session.relativeModified)
+                        .font(.caption2)
+                        .foregroundColor(.secondary.opacity(0.7))
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(NSColor.controlBackgroundColor))
+            .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Usage Row
+
 struct UsageRow: View {
     let title: String
     let subtitle: String
     let percentage: Int
     let resetsAt: Date?
     let color: Color
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -291,29 +413,29 @@ struct UsageRow: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                
+
                 Spacer()
-                
+
                 Text("\(percentage)%")
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(color)
             }
-            
+
             // Progress bar
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 4)
                         .fill(Color(NSColor.separatorColor))
                         .frame(height: 8)
-                    
+
                     RoundedRectangle(cornerRadius: 4)
                         .fill(color)
                         .frame(width: geometry.size.width * CGFloat(percentage) / 100, height: 8)
                 }
             }
             .frame(height: 8)
-            
+
             // Reset time
             if let resetsAt = resetsAt {
                 HStack {
@@ -329,26 +451,26 @@ struct UsageRow: View {
         .background(Color(NSColor.controlBackgroundColor))
         .cornerRadius(8)
     }
-    
+
     func formatTimeRemaining(_ date: Date) -> String {
         let now = Date()
         let diff = date.timeIntervalSince(now)
-        
+
         if diff <= 0 { return "soon" }
-        
+
         let hours = Int(diff / 3600)
         let minutes = Int((diff.truncatingRemainder(dividingBy: 3600)) / 60)
-        
+
         if hours > 24 {
             let days = hours / 24
             let remainingHours = hours % 24
             return "in \(days)d \(remainingHours)h"
         }
-        
+
         return "in \(hours)h \(minutes)m"
     }
 }
 
 #Preview {
-    UsageView(manager: UsageManager())
+    UsageView(manager: UsageManager(), sessionManager: SessionManager())
 }
