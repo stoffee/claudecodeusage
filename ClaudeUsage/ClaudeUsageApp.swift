@@ -77,10 +77,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             await usageManager.checkForUpdates()
         }
 
-        // Refresh every 2 minutes
+        // Refresh every 2 minutes (usage + sessions)
         timer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.usageManager.refresh()
+                self?.sessionManager.loadSessions()
             }
         }
     }
@@ -112,9 +113,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let emoji = usageManager.statusEmoji
             button.title = "\(emoji) \(sessionPct)%"
         } else if usageManager.error != nil {
-            button.title = "X"
+            button.title = "\u{274C}"
         } else {
-            button.title = "..."
+            button.title = "\u{23F3}"
         }
     }
 

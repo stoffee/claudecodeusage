@@ -149,9 +149,11 @@ struct UsageView: View {
             ScrollView {
                 LazyVStack(spacing: 8) {
                     ForEach(sessionManager.sessions) { session in
-                        SessionRow(session: session) {
+                        SessionRow(session: session, onTap: {
                             sessionManager.resumeSession(session)
-                        }
+                        }, onDelete: {
+                            sessionManager.deleteSession(session)
+                        })
                     }
                 }
                 .padding(.horizontal)
@@ -265,12 +267,13 @@ struct UsageView: View {
                 Spacer()
 
                 Button(action: {
+                    sessionManager.loadSessions()
                     Task { await manager.refresh() }
                 }) {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.borderless)
-                .disabled(manager.isLoading)
+                .disabled(manager.isLoading && sessionManager.isLoading)
 
                 Button(action: {
                     openURL(URL(string: "https://claude.ai")!)
@@ -342,54 +345,64 @@ struct UsageView: View {
 struct SessionRow: View {
     let session: SessionEntry
     let onTap: () -> Void
+    let onDelete: () -> Void
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(session.displayTitle)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .lineLimit(2)
-                    .foregroundColor(.primary)
+        HStack(spacing: 0) {
+            // Delete button
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .help("Delete session")
 
-                HStack(spacing: 8) {
-                    // Project name
-                    Label(session.shortProjectName, systemImage: "folder")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+            // Session card (clickable)
+            Button(action: onTap) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(session.displayTitle)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .lineLimit(2)
+                        .foregroundColor(.primary)
 
-                    // Git branch
-                    if let branch = session.branchDisplay {
-                        Label(branch, systemImage: "arrow.triangle.branch")
+                    HStack(spacing: 8) {
+                        Label(session.shortProjectName, systemImage: "folder")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .lineLimit(1)
+
+                        if let branch = session.branchDisplay {
+                            Label(branch, systemImage: "arrow.triangle.branch")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+
+                        Spacer()
+
+                        if session.messageCount > 0 {
+                            Label("\(session.messageCount)", systemImage: "message")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
 
-                    Spacer()
-
-                    // Message count
-                    if let count = session.messageCount, count > 0 {
-                        Label("\(count)", systemImage: "message")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    if !session.relativeModified.isEmpty {
+                        Text(session.relativeModified)
+                            .font(.caption2)
+                            .foregroundColor(.secondary.opacity(0.7))
                     }
                 }
-
-                // Relative time
-                if !session.relativeModified.isEmpty {
-                    Text(session.relativeModified)
-                        .font(.caption2)
-                        .foregroundColor(.secondary.opacity(0.7))
-                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(NSColor.controlBackgroundColor))
-            .cornerRadius(8)
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(8)
     }
 }
 

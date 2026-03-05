@@ -1,70 +1,111 @@
 import Foundation
 
-struct SessionEntry: Codable, Identifiable {
+struct SessionEntry: Identifiable {
     let sessionId: String
-    let fullPath: String?
-    let fileMtime: Double?
-    let firstPrompt: String?
-    let summary: String?
-    let messageCount: Int?
-    let created: String?
-    let modified: String?
-    let gitBranch: String?
-    let projectPath: String?
-    let isSidechain: Bool?
+    let fullPath: String
+    let projectPath: String
+    let firstPrompt: String
+    let messageCount: Int
+    let modifiedDate: Date
+    let gitBranch: String
 
     var id: String { sessionId }
 
     var displayTitle: String {
-        if let summary = summary, !summary.isEmpty {
-            return summary
-        }
-        if let prompt = firstPrompt, !prompt.isEmpty, prompt != "No prompt" {
-            return String(prompt.prefix(60))
+        if !firstPrompt.isEmpty {
+            return String(firstPrompt.prefix(80))
         }
         return "Untitled Session"
     }
 
     var shortProjectName: String {
-        guard let path = projectPath, !path.isEmpty else { return "~" }
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        if path == home { return "~" }
-        if path.hasPrefix(home) {
-            let relative = String(path.dropFirst(home.count + 1))
-            // Show last 2 path components for context
+        if projectPath == home || projectPath.isEmpty { return "~" }
+        if projectPath.hasPrefix(home) {
+            let relative = String(projectPath.dropFirst(home.count + 1))
             let parts = relative.split(separator: "/")
             if parts.count <= 2 { return relative }
             return parts.suffix(2).joined(separator: "/")
         }
-        return (path as NSString).lastPathComponent
-    }
-
-    var modifiedDate: Date? {
-        guard let modified = modified else { return nil }
-        let fmt = ISO8601DateFormatter()
-        fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = fmt.date(from: modified) { return d }
-        fmt.formatOptions = [.withInternetDateTime]
-        return fmt.date(from: modified)
+        return (projectPath as NSString).lastPathComponent
     }
 
     var relativeModified: String {
-        guard let date = modifiedDate else { return "" }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return formatter.localizedString(for: modifiedDate, relativeTo: Date())
     }
 
     var branchDisplay: String? {
-        guard let branch = gitBranch, !branch.isEmpty else { return nil }
-        return branch
+        gitBranch.isEmpty ? nil : gitBranch
     }
 }
 
-struct SessionsIndex: Codable {
-    let version: Int?
-    let entries: [SessionEntry]
-    let originalPath: String?
+// Free functions to avoid @MainActor isolation in Task.detached
+
+private func parseSessionFile(_ path: String) -> (prompt: String, messageCount: Int, cwd: String, branch: String) {
+    guard let fh = FileHandle(forReadingAtPath: path) else {
+        return ("", 0, "", "")
+    }
+    defer { fh.closeFile() }
+
+    let data = fh.readData(ofLength: 64 * 1024)
+    guard let content = String(data: data, encoding: .utf8) else {
+        return ("", 0, "", "")
+    }
+
+    var prompt = ""
+    var cwd = ""
+    var branch = ""
+    var messageCount = 0
+
+    for line in content.split(separator: "\n") {
+        guard let obj = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else { continue }
+
+        let type = obj["type"] as? String ?? ""
+        if type == "user" || type == "assistant" {
+            messageCount += 1
+        }
+
+        if cwd.isEmpty, let c = obj["cwd"] as? String {
+            cwd = c
+        }
+
+        if branch.isEmpty, let b = obj["gitBranch"] as? String {
+            branch = b
+        }
+
+        if prompt.isEmpty && type == "user" {
+            let userType = obj["userType"] as? String ?? ""
+            if userType == "external" {
+                if let msg = obj["message"] as? [String: Any] {
+                    if let contentArr = msg["content"] as? [[String: Any]] {
+                        for c in contentArr {
+                            if c["type"] as? String == "text",
+                               let text = c["text"] as? String, !text.isEmpty {
+                                prompt = text
+                                break
+                            }
+                        }
+                    } else if let text = msg["content"] as? String {
+                        prompt = text
+                    }
+                }
+            }
+        }
+    }
+
+    if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+       let fileSize = attrs[.size] as? Int, fileSize > 64 * 1024 {
+        let ratio = Double(fileSize) / Double(data.count)
+        messageCount = Int(Double(messageCount) * ratio)
+    }
+
+    return (prompt, messageCount, cwd, branch)
+}
+
+private func decodeProjectPath(_ encoded: String) -> String {
+    "/" + encoded.dropFirst().replacingOccurrences(of: "-", with: "/")
 }
 
 @MainActor
@@ -77,12 +118,12 @@ class SessionManager: ObservableObject {
         let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
         let projectsDir = "\(homeDir)/.claude/projects"
 
-        Task.detached { [weak self] in
+        Task.detached {
             var allSessions: [SessionEntry] = []
             let fm = FileManager.default
 
             guard let dirs = try? fm.contentsOfDirectory(atPath: projectsDir) else {
-                await MainActor.run {
+                await MainActor.run { [weak self] in
                     self?.sessions = []
                     self?.isLoading = false
                 }
@@ -90,40 +131,91 @@ class SessionManager: ObservableObject {
             }
 
             for dir in dirs {
-                let indexPath = "\(projectsDir)/\(dir)/sessions-index.json"
-                guard fm.fileExists(atPath: indexPath),
-                      let data = fm.contents(atPath: indexPath) else { continue }
-                do {
-                    let index = try JSONDecoder().decode(SessionsIndex.self, from: data)
-                    allSessions.append(contentsOf: index.entries)
-                } catch {
-                    continue
+                let dirPath = "\(projectsDir)/\(dir)"
+                guard let files = try? fm.contentsOfDirectory(atPath: dirPath) else { continue }
+
+                // Decode project path from directory name (dashes become slashes)
+                let projectPath = decodeProjectPath(dir)
+
+                for file in files {
+                    guard file.hasSuffix(".jsonl"),
+                          !file.contains("subagent") else { continue }
+                    let filePath = "\(dirPath)/\(file)"
+                    let sessionId = String(file.dropLast(6)) // remove .jsonl
+
+                    // Get file modification date
+                    guard let attrs = try? fm.attributesOfItem(atPath: filePath),
+                          let modDate = attrs[.modificationDate] as? Date else { continue }
+
+                    // Read first few lines to get metadata
+                    let (prompt, msgCount, cwd, branch) = parseSessionFile(filePath)
+
+                    let session = SessionEntry(
+                        sessionId: sessionId,
+                        fullPath: filePath,
+                        projectPath: cwd.isEmpty ? projectPath : cwd,
+                        firstPrompt: prompt,
+                        messageCount: msgCount,
+                        modifiedDate: modDate,
+                        gitBranch: branch
+                    )
+                    allSessions.append(session)
                 }
             }
 
-            // Sort by modified date, most recent first; fall back to fileMtime
-            allSessions.sort { a, b in
-                let aDate = a.modifiedDate ?? Date(timeIntervalSince1970: (a.fileMtime ?? 0) / 1000)
-                let bDate = b.modifiedDate ?? Date(timeIntervalSince1970: (b.fileMtime ?? 0) / 1000)
-                return aDate > bDate
-            }
+            allSessions.sort { $0.modifiedDate > $1.modifiedDate }
 
-            await MainActor.run {
+            await MainActor.run { [weak self] in
                 self?.sessions = allSessions
                 self?.isLoading = false
             }
         }
     }
 
+    func deleteSession(_ session: SessionEntry) {
+        let fm = FileManager.default
+
+        // Delete the .jsonl session file
+        if fm.fileExists(atPath: session.fullPath) {
+            try? fm.removeItem(atPath: session.fullPath)
+        }
+
+        // Also delete subagents directory if it exists
+        let subagentsDir = session.fullPath.replacingOccurrences(of: ".jsonl", with: "")
+        if fm.fileExists(atPath: subagentsDir) {
+            try? fm.removeItem(atPath: subagentsDir)
+        }
+
+        // Also remove from sessions-index.json if present
+        let homeDir = fm.homeDirectoryForCurrentUser.path
+        let projectsDir = "\(homeDir)/.claude/projects"
+        if let dirs = try? fm.contentsOfDirectory(atPath: projectsDir) {
+            for dir in dirs {
+                let indexPath = "\(projectsDir)/\(dir)/sessions-index.json"
+                guard fm.fileExists(atPath: indexPath),
+                      let data = fm.contents(atPath: indexPath),
+                      var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      var entries = json["entries"] as? [[String: Any]] else { continue }
+
+                let before = entries.count
+                entries.removeAll { ($0["sessionId"] as? String) == session.sessionId }
+                if entries.count < before {
+                    json["entries"] = entries
+                    if let updated = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) {
+                        try? updated.write(to: URL(fileURLWithPath: indexPath))
+                    }
+                }
+            }
+        }
+
+        // Remove from local list
+        sessions.removeAll { $0.sessionId == session.sessionId }
+    }
+
     func resumeSession(_ session: SessionEntry) {
-        let projectPath = session.projectPath ?? FileManager.default.homeDirectoryForCurrentUser.path
-        // Escape for AppleScript string (backslash and double-quote)
-        let escapedPath = projectPath
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-        let escapedId = session.sessionId
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
+        let projectPath = session.projectPath.isEmpty
+            ? FileManager.default.homeDirectoryForCurrentUser.path
+            : session.projectPath
 
         let script = """
         tell application "iTerm2"
@@ -131,22 +223,28 @@ class SessionManager: ObservableObject {
             if (count of windows) = 0 then
                 create window with default profile
                 tell current session of current window
-                    write text "cd \\"\(escapedPath)\\" && claude --resume \\"\(escapedId)\\""
+                    write text "cd \(shellQuote(projectPath)) && claude --resume \(shellQuote(session.sessionId))"
                 end tell
             else
                 tell current window
                     create tab with default profile
                     tell current session
-                        write text "cd \\"\(escapedPath)\\" && claude --resume \\"\(escapedId)\\""
+                        write text "cd \(shellQuote(projectPath)) && claude --resume \(shellQuote(session.sessionId))"
                     end tell
                 end tell
             end if
         end tell
         """
 
-        if let appleScript = NSAppleScript(source: script) {
-            var error: NSDictionary?
-            appleScript.executeAndReturnError(&error)
-        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", script]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try? process.run()
+    }
+
+    private func shellQuote(_ s: String) -> String {
+        "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }
