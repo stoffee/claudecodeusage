@@ -12,6 +12,7 @@ struct UsageView: View {
     @ObservedObject var sessionManager: SessionManager
     @Environment(\.openURL) var openURL
     @State private var selectedTab: AppTab = .usage
+    @State private var sessionSearchText: String = ""
     @State private var launchAtLogin: Bool = {
         if #available(macOS 13.0, *) {
             return SMAppService.mainApp.status == .enabled
@@ -126,40 +127,82 @@ struct UsageView: View {
                     color: colorForPercentage(sonnetPct)
                 )
             }
+
+            // Extra usage / overage (if enabled)
+            if usage.extraUsageEnabled, let limit = usage.extraUsageMonthlyLimit, let used = usage.extraUsageUsedCredits {
+                OverageRow(
+                    usedDollars: used / 100,
+                    limitDollars: limit / 100,
+                    percentage: usage.extraUsagePercentage ?? 0
+                )
+            }
         }
         .padding()
     }
 
     // MARK: - Sessions Tab
 
+    var filteredSessions: [SessionEntry] {
+        guard !sessionSearchText.isEmpty else { return sessionManager.sessions }
+        let query = sessionSearchText.lowercased()
+        return sessionManager.sessions.filter { session in
+            session.displayTitle.lowercased().contains(query) ||
+            session.shortProjectName.lowercased().contains(query) ||
+            (session.branchDisplay?.lowercased().contains(query) ?? false)
+        }
+    }
+
     @ViewBuilder
     func sessionsTabContent() -> some View {
-        if sessionManager.sessions.isEmpty && !sessionManager.isLoading {
-            VStack(spacing: 12) {
-                Image(systemName: "tray")
-                    .font(.largeTitle)
+        VStack(spacing: 0) {
+            // Search field
+            HStack {
+                Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
-                Text("No sessions found")
+                TextField("Search sessions...", text: $sessionSearchText)
+                    .textFieldStyle(.plain)
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-            .padding()
-            .frame(maxWidth: .infinity, minHeight: 200)
-        } else {
-            ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(sessionManager.sessions) { session in
-                        SessionRow(session: session, onTap: {
-                            sessionManager.resumeSession(session)
-                        }, onDelete: {
-                            sessionManager.deleteSession(session)
-                        })
+                if !sessionSearchText.isEmpty {
+                    Button(action: { sessionSearchText = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
                     }
+                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
             }
-            .frame(minHeight: 200, maxHeight: 320)
+            .padding(8)
+            .background(Color(NSColor.textBackgroundColor))
+            .cornerRadius(8)
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+
+            if filteredSessions.isEmpty && !sessionManager.isLoading {
+                VStack(spacing: 12) {
+                    Image(systemName: sessionSearchText.isEmpty ? "tray" : "magnifyingglass")
+                        .font(.largeTitle)
+                        .foregroundColor(.secondary)
+                    Text(sessionSearchText.isEmpty ? "No sessions found" : "No matching sessions")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .padding()
+                .frame(maxWidth: .infinity, minHeight: 180)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach(filteredSessions) { session in
+                            SessionRow(session: session, onTap: {
+                                sessionManager.resumeSession(session)
+                            }, onDelete: {
+                                sessionManager.deleteSession(session)
+                            })
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                }
+                .frame(minHeight: 180, maxHeight: 300)
+            }
         }
     }
 
@@ -481,6 +524,62 @@ struct UsageRow: View {
         }
 
         return "in \(hours)h \(minutes)m"
+    }
+}
+
+struct OverageRow: View {
+    let usedDollars: Double
+    let limitDollars: Double
+    let percentage: Int
+
+    var color: Color {
+        if percentage >= 90 { return .red }
+        if percentage >= 70 { return .orange }
+        return .blue
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Overage")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Text("Extra usage this month")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("$\(String(format: "%.2f", usedDollars))")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(color)
+                    Text("of $\(String(format: "%.0f", limitDollars)) limit")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            // Progress bar
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(NSColor.separatorColor))
+                        .frame(height: 8)
+
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(color)
+                        .frame(width: geometry.size.width * CGFloat(min(percentage, 100)) / 100, height: 8)
+                }
+            }
+            .frame(height: 8)
+        }
+        .padding(12)
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(8)
     }
 }
 
