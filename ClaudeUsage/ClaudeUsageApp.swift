@@ -74,7 +74,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             await usageManager.refresh()
-            await usageManager.checkForUpdates()
         }
 
         // Refresh every 5 minutes (usage + sessions)
