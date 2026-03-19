@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 struct SessionEntry: Identifiable {
     let sessionId: String
@@ -217,34 +218,34 @@ class SessionManager: ObservableObject {
             ? FileManager.default.homeDirectoryForCurrentUser.path
             : session.projectPath
 
-        let script = """
-        tell application "iTerm2"
-            activate
-            if (count of windows) = 0 then
-                create window with default profile
-                tell current session of current window
-                    write text "cd \(shellQuote(projectPath)) && claude --resume \(shellQuote(session.sessionId))"
-                end tell
-            else
-                tell current window
-                    create tab with default profile
-                    tell current session
-                        write text "cd \(shellQuote(projectPath)) && claude --resume \(shellQuote(session.sessionId))"
-                    end tell
-                end tell
-            end if
-        end tell
+        // Write a temp script and open it in Warp — no Accessibility permissions needed
+        let tmpScript = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("claude_resume_\(session.sessionId).sh")
+
+        let scriptContent = """
+        #!/bin/bash
+        cd \(shellQuote(projectPath))
+        claude --resume \(shellQuote(session.sessionId))
         """
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = ["-e", script]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        try? process.run()
+        do {
+            try scriptContent.write(to: tmpScript, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tmpScript.path)
+        } catch {
+            return
+        }
+
+        NSWorkspace.shared.openFile(tmpScript.path, withApplication: "Warp")
     }
 
     private func shellQuote(_ s: String) -> String {
         "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    private func appleScriptQuote(_ s: String) -> String {
+        let escaped = s
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"" + escaped + "\""
     }
 }
