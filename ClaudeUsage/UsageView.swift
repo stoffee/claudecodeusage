@@ -7,12 +7,116 @@ enum AppTab: String, CaseIterable {
     case sessions = "Sessions"
 }
 
+// MARK: - Theme
+
+enum AppTheme: String, CaseIterable {
+    case standard = "Default"
+    case system = "System"
+    case stoffee = "Stoffee"
+
+    var headerBackground: Color {
+        switch self {
+        case .standard: return Color(NSColor.controlBackgroundColor)
+        case .system: return Color(NSColor.controlBackgroundColor)
+        case .stoffee: return Color(red: 0.15, green: 0.05, blue: 0.2)
+        }
+    }
+
+    var cardBackground: Color {
+        switch self {
+        case .standard: return Color(NSColor.controlBackgroundColor)
+        case .system: return Color(NSColor.controlBackgroundColor)
+        case .stoffee: return Color(red: 0.2, green: 0.08, blue: 0.28)
+        }
+    }
+
+    var popoverBackground: Color {
+        switch self {
+        case .standard: return Color(NSColor.windowBackgroundColor)
+        case .system: return Color(NSColor.windowBackgroundColor)
+        case .stoffee: return Color(red: 0.12, green: 0.03, blue: 0.18)
+        }
+    }
+
+    var primaryText: Color {
+        switch self {
+        case .standard, .system: return Color.primary
+        case .stoffee: return Color(red: 1.0, green: 0.85, blue: 1.0)
+        }
+    }
+
+    var secondaryText: Color {
+        switch self {
+        case .standard, .system: return Color.secondary
+        case .stoffee: return Color(red: 0.75, green: 0.55, blue: 0.85)
+        }
+    }
+
+    var accent: Color {
+        switch self {
+        case .standard: return .accentColor
+        case .system: return .accentColor
+        case .stoffee: return Color(red: 1.0, green: 0.2, blue: 0.6) // hot pink
+        }
+    }
+
+    var barTrack: Color {
+        switch self {
+        case .standard, .system: return Color(NSColor.separatorColor)
+        case .stoffee: return Color(red: 0.3, green: 0.12, blue: 0.4)
+        }
+    }
+
+    var searchBackground: Color {
+        switch self {
+        case .standard, .system: return Color(NSColor.textBackgroundColor)
+        case .stoffee: return Color(red: 0.22, green: 0.1, blue: 0.3)
+        }
+    }
+
+    func colorForPercentage(_ pct: Int) -> Color {
+        switch self {
+        case .standard, .system:
+            if pct >= 90 { return .red }
+            if pct >= 70 { return .orange }
+            return .green
+        case .stoffee:
+            if pct >= 90 { return Color(red: 1.0, green: 0.1, blue: 0.3) }   // neon red-pink
+            if pct >= 70 { return Color(red: 1.0, green: 0.4, blue: 0.9) }   // neon magenta
+            return Color(red: 0.6, green: 0.2, blue: 1.0)                     // electric purple
+        }
+    }
+
+    func overageColor(_ pct: Int) -> Color {
+        switch self {
+        case .standard, .system:
+            if pct >= 90 { return .red }
+            if pct >= 70 { return .orange }
+            return .blue
+        case .stoffee:
+            if pct >= 90 { return Color(red: 1.0, green: 0.1, blue: 0.3) }
+            if pct >= 70 { return Color(red: 1.0, green: 0.4, blue: 0.9) }
+            return Color(red: 0.0, green: 0.8, blue: 1.0) // cyan neon
+        }
+    }
+
+    var themeIcon: String {
+        switch self {
+        case .standard: return "paintbrush"
+        case .system: return "gearshape"
+        case .stoffee: return "sparkles"
+        }
+    }
+}
+
 struct UsageView: View {
     @ObservedObject var manager: UsageManager
     @ObservedObject var sessionManager: SessionManager
     @Environment(\.openURL) var openURL
     @State private var selectedTab: AppTab = .usage
     @State private var sessionSearchText: String = ""
+    @AppStorage("appTheme") private var selectedTheme: String = AppTheme.standard.rawValue
+    private var theme: AppTheme { AppTheme(rawValue: selectedTheme) ?? .standard }
     @State private var launchAtLogin: Bool = {
         if #available(macOS 13.0, *) {
             return SMAppService.mainApp.status == .enabled
@@ -25,12 +129,13 @@ struct UsageView: View {
             // Header
             HStack {
                 Image(systemName: "chart.bar.fill")
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(theme.accent)
                 Text("Claude Usage")
                     .font(.headline)
+                    .foregroundColor(theme.primaryText)
                 Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")")
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(theme.secondaryText)
                 Spacer()
 
                 if manager.isLoading || sessionManager.isLoading {
@@ -39,7 +144,7 @@ struct UsageView: View {
                 }
             }
             .padding()
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(theme.headerBackground)
 
             // Tab picker
             Picker("", selection: $selectedTab) {
@@ -67,6 +172,7 @@ struct UsageView: View {
             footerView()
         }
         .frame(width: 340)
+        .background(theme.popoverBackground)
     }
 
     // MARK: - Usage Tab
@@ -90,7 +196,8 @@ struct UsageView: View {
                 subtitle: "5-hour window",
                 percentage: usage.sessionPercentage,
                 resetsAt: usage.sessionResetsAt,
-                color: colorForPercentage(usage.sessionPercentage)
+                color: theme.colorForPercentage(usage.sessionPercentage),
+                theme: theme
             )
 
             UsageRow(
@@ -98,7 +205,8 @@ struct UsageView: View {
                 subtitle: "7-day window",
                 percentage: usage.weeklyPercentage,
                 resetsAt: usage.weeklyResetsAt,
-                color: colorForPercentage(usage.weeklyPercentage)
+                color: theme.colorForPercentage(usage.weeklyPercentage),
+                theme: theme
             )
 
             if let sonnetPct = usage.sonnetPercentage {
@@ -107,7 +215,8 @@ struct UsageView: View {
                     subtitle: "Model-specific",
                     percentage: sonnetPct,
                     resetsAt: usage.sonnetResetsAt,
-                    color: colorForPercentage(sonnetPct)
+                    color: theme.colorForPercentage(sonnetPct),
+                    theme: theme
                 )
             }
 
@@ -116,7 +225,8 @@ struct UsageView: View {
                 OverageRow(
                     usedDollars: used / 100,
                     limitDollars: limit / 100,
-                    percentage: usage.extraUsagePercentage ?? 0
+                    percentage: usage.extraUsagePercentage ?? 0,
+                    theme: theme
                 )
             }
         }
@@ -141,20 +251,21 @@ struct UsageView: View {
             // Search field
             HStack {
                 Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(theme.secondaryText)
                 TextField("Search sessions...", text: $sessionSearchText)
                     .textFieldStyle(.plain)
                     .font(.subheadline)
+                    .foregroundColor(theme.primaryText)
                 if !sessionSearchText.isEmpty {
                     Button(action: { sessionSearchText = "" }) {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(theme.secondaryText)
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(8)
-            .background(Color(NSColor.textBackgroundColor))
+            .background(theme.searchBackground)
             .cornerRadius(8)
             .padding(.horizontal)
             .padding(.vertical, 6)
@@ -163,10 +274,10 @@ struct UsageView: View {
                 VStack(spacing: 12) {
                     Image(systemName: sessionSearchText.isEmpty ? "tray" : "magnifyingglass")
                         .font(.largeTitle)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(theme.secondaryText)
                     Text(sessionSearchText.isEmpty ? "No sessions found" : "No matching sessions")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(theme.secondaryText)
                 }
                 .padding()
                 .frame(maxWidth: .infinity, minHeight: 180)
@@ -174,7 +285,7 @@ struct UsageView: View {
                 ScrollView {
                     LazyVStack(spacing: 8) {
                         ForEach(filteredSessions) { session in
-                            SessionRow(session: session, onTap: {
+                            SessionRow(session: session, theme: theme, onTap: {
                                 sessionManager.resumeSession(session)
                             }, onDelete: {
                                 sessionManager.deleteSession(session)
@@ -259,12 +370,14 @@ struct UsageView: View {
                 Toggle("Launch at Login", isOn: $launchAtLogin)
                     .toggleStyle(.checkbox)
                     .font(.caption)
+                    .foregroundColor(theme.secondaryText)
                     .onChange(of: launchAtLogin) { _, newValue in setLaunchAtLogin(newValue) }
                     .padding(.horizontal)
             } else {
                 Toggle("Launch at Login", isOn: $launchAtLogin)
                     .toggleStyle(.checkbox)
                     .font(.caption)
+                    .foregroundColor(theme.secondaryText)
                     .onChange(of: launchAtLogin) { newValue in setLaunchAtLogin(newValue) }
                     .padding(.horizontal)
             }
@@ -275,7 +388,7 @@ struct UsageView: View {
                 if let lastUpdated = manager.lastUpdated {
                     Text("Updated \(lastUpdated.formatted(.relative(presentation: .named)))")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(theme.secondaryText)
                 }
 
                 Spacer()
@@ -285,6 +398,7 @@ struct UsageView: View {
                     Task { await manager.refresh() }
                 }) {
                     Image(systemName: "arrow.clockwise")
+                        .foregroundColor(theme.secondaryText)
                 }
                 .buttonStyle(.borderless)
                 .disabled(manager.isLoading && sessionManager.isLoading)
@@ -293,13 +407,35 @@ struct UsageView: View {
                     openURL(URL(string: "https://claude.ai")!)
                 }) {
                     Image(systemName: "globe")
+                        .foregroundColor(theme.secondaryText)
                 }
                 .buttonStyle(.borderless)
+
+                // Theme picker
+                Menu {
+                    ForEach(AppTheme.allCases, id: \.self) { t in
+                        Button(action: { selectedTheme = t.rawValue }) {
+                            HStack {
+                                Image(systemName: t.themeIcon)
+                                Text(t.rawValue)
+                                if t.rawValue == selectedTheme {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: theme.themeIcon)
+                        .foregroundColor(theme == .stoffee ? theme.accent : theme.secondaryText)
+                }
+                .menuStyle(.borderlessButton)
+                .frame(width: 20)
 
                 Button(action: {
                     NSApplication.shared.terminate(nil)
                 }) {
                     Image(systemName: "xmark.circle")
+                        .foregroundColor(theme.secondaryText)
                 }
                 .buttonStyle(.borderless)
             }
@@ -312,12 +448,12 @@ struct UsageView: View {
             }) {
                 Text("Created by @richhickson")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(theme.secondaryText)
             }
             .buttonStyle(.borderless)
             .padding(.bottom, 8)
         }
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(theme.headerBackground)
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
@@ -333,12 +469,6 @@ struct UsageView: View {
     }
 
     // MARK: - Helpers
-
-    func colorForPercentage(_ pct: Int) -> Color {
-        if pct >= 90 { return .red }
-        if pct >= 70 { return .orange }
-        return .green
-    }
 
     func launchClaudeCLI() {
         let script = """
@@ -358,6 +488,7 @@ struct UsageView: View {
 
 struct SessionRow: View {
     let session: SessionEntry
+    var theme: AppTheme = .standard
     let onTap: () -> Void
     let onDelete: () -> Void
 
@@ -367,7 +498,7 @@ struct SessionRow: View {
             Button(action: onDelete) {
                 Image(systemName: "trash")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(theme.secondaryText)
                     .frame(width: 28, height: 28)
             }
             .buttonStyle(.plain)
@@ -380,18 +511,18 @@ struct SessionRow: View {
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .lineLimit(2)
-                        .foregroundColor(.primary)
+                        .foregroundColor(theme.primaryText)
 
                     HStack(spacing: 8) {
                         Label(session.shortProjectName, systemImage: "folder")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(theme.secondaryText)
                             .lineLimit(1)
 
                         if let branch = session.branchDisplay {
                             Label(branch, systemImage: "arrow.triangle.branch")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(theme.secondaryText)
                                 .lineLimit(1)
                         }
 
@@ -400,14 +531,14 @@ struct SessionRow: View {
                         if session.messageCount > 0 {
                             Label("\(session.messageCount)", systemImage: "message")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(theme.secondaryText)
                         }
                     }
 
                     if !session.relativeModified.isEmpty {
                         Text(session.relativeModified)
                             .font(.caption2)
-                            .foregroundColor(.secondary.opacity(0.7))
+                            .foregroundColor(theme.secondaryText.opacity(0.7))
                     }
                 }
                 .padding(10)
@@ -415,7 +546,7 @@ struct SessionRow: View {
             }
             .buttonStyle(.plain)
         }
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(theme.cardBackground)
         .cornerRadius(8)
     }
 }
@@ -428,6 +559,7 @@ struct UsageRow: View {
     let percentage: Int
     let resetsAt: Date?
     let color: Color
+    var theme: AppTheme = .standard
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -436,9 +568,10 @@ struct UsageRow: View {
                     Text(title)
                         .font(.subheadline)
                         .fontWeight(.medium)
+                        .foregroundColor(theme.primaryText)
                     Text(subtitle)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(theme.secondaryText)
                 }
 
                 Spacer()
@@ -453,7 +586,7 @@ struct UsageRow: View {
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(NSColor.separatorColor))
+                        .fill(theme.barTrack)
                         .frame(height: 8)
 
                     RoundedRectangle(cornerRadius: 4)
@@ -471,11 +604,11 @@ struct UsageRow: View {
                     Text("Resets \(formatTimeRemaining(resetsAt))")
                         .font(.caption)
                 }
-                .foregroundColor(.secondary)
+                .foregroundColor(theme.secondaryText)
             }
         }
         .padding(12)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(theme.cardBackground)
         .cornerRadius(8)
     }
 
@@ -502,12 +635,9 @@ struct OverageRow: View {
     let usedDollars: Double
     let limitDollars: Double
     let percentage: Int
+    var theme: AppTheme = .standard
 
-    var color: Color {
-        if percentage >= 90 { return .red }
-        if percentage >= 70 { return .orange }
-        return .blue
-    }
+    var color: Color { theme.overageColor(percentage) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -516,9 +646,10 @@ struct OverageRow: View {
                     Text("Overage")
                         .font(.subheadline)
                         .fontWeight(.medium)
+                        .foregroundColor(theme.primaryText)
                     Text("Extra usage this month")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(theme.secondaryText)
                 }
 
                 Spacer()
@@ -530,7 +661,7 @@ struct OverageRow: View {
                         .foregroundColor(color)
                     Text("of $\(String(format: "%.0f", limitDollars)) limit")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(theme.secondaryText)
                 }
             }
 
@@ -538,7 +669,7 @@ struct OverageRow: View {
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(NSColor.separatorColor))
+                        .fill(theme.barTrack)
                         .frame(height: 8)
 
                     RoundedRectangle(cornerRadius: 4)
@@ -549,7 +680,7 @@ struct OverageRow: View {
             .frame(height: 8)
         }
         .padding(12)
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(theme.cardBackground)
         .cornerRadius(8)
     }
 }
