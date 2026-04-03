@@ -51,23 +51,6 @@ struct UsageView: View {
             .padding(.horizontal)
             .padding(.vertical, 8)
 
-            // Update available banner
-            if let newVersion = manager.updateAvailable {
-                Button(action: {
-                    openURL(URL(string: "https://github.com/richhickson/claudecodeusage/releases/latest")!)
-                }) {
-                    HStack {
-                        Image(systemName: "arrow.down.circle.fill")
-                        Text("Update Available: v\(newVersion)")
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-                .padding(.horizontal)
-                .padding(.bottom, 8)
-            }
-
             Divider()
 
             // Tab content
@@ -272,18 +255,6 @@ struct UsageView: View {
     @ViewBuilder
     func footerView() -> some View {
         VStack(spacing: 8) {
-            Button(action: {
-                Task { await manager.checkForUpdates() }
-            }) {
-                HStack {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                    Text("Check for Updates")
-                }
-            }
-            .buttonStyle(.borderless)
-            .font(.caption)
-            .padding(.top, 8)
-
             if #available(macOS 14.0, *) {
                 Toggle("Launch at Login", isOn: $launchAtLogin)
                     .toggleStyle(.checkbox)
