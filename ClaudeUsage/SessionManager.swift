@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 struct SessionEntry: Identifiable {
     let sessionId: String
@@ -212,29 +213,75 @@ class SessionManager: ObservableObject {
         sessions.removeAll { $0.sessionId == session.sessionId }
     }
 
+    enum TerminalApp: String {
+        case iterm = "iTerm2"
+        case warp = "Warp"
+    }
+
     func resumeSession(_ session: SessionEntry) {
+        // Show terminal picker
+        let alert = NSAlert()
+        alert.messageText = "Open session in..."
+        alert.informativeText = session.displayTitle
+        alert.addButton(withTitle: "iTerm2")
+        alert.addButton(withTitle: "Warp")
+        alert.addButton(withTitle: "Cancel")
+
+        let response = alert.runModal()
+        switch response {
+        case .alertFirstButtonReturn:
+            launchInTerminal(session: session, app: .iterm)
+        case .alertSecondButtonReturn:
+            launchInTerminal(session: session, app: .warp)
+        default:
+            break
+        }
+    }
+
+    private func launchInTerminal(session: SessionEntry, app: TerminalApp) {
         let projectPath = session.projectPath.isEmpty
             ? FileManager.default.homeDirectoryForCurrentUser.path
             : session.projectPath
 
-        let script = """
-        tell application "iTerm2"
-            activate
-            if (count of windows) = 0 then
-                create window with default profile
-                tell current session of current window
-                    write text "cd \(shellQuote(projectPath)) && claude --resume \(shellQuote(session.sessionId))"
-                end tell
-            else
-                tell current window
-                    create tab with default profile
-                    tell current session
-                        write text "cd \(shellQuote(projectPath)) && claude --resume \(shellQuote(session.sessionId))"
+        let command = "cd \(shellQuote(projectPath)) && claude --resume \(shellQuote(session.sessionId))"
+
+        let script: String
+        switch app {
+        case .iterm:
+            script = """
+            tell application "iTerm2"
+                activate
+                if (count of windows) = 0 then
+                    create window with default profile
+                    tell current session of current window
+                        write text "\(command)"
                     end tell
+                else
+                    tell current window
+                        create tab with default profile
+                        tell current session
+                            write text "\(command)"
+                        end tell
+                    end tell
+                end if
+            end tell
+            """
+        case .warp:
+            script = """
+            tell application "Warp"
+                activate
+            end tell
+            delay 0.5
+            tell application "System Events"
+                tell process "Warp"
+                    keystroke "t" using command down
+                    delay 0.3
+                    keystroke "\(command)"
+                    key code 36
                 end tell
-            end if
-        end tell
-        """
+            end tell
+            """
+        }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
