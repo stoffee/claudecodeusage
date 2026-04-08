@@ -443,14 +443,29 @@ struct UsageView: View {
 
             Divider()
 
-            Button(action: {
-                openURL(URL(string: "https://x.com/richhickson")!)
-            }) {
-                Text("Created by @richhickson")
-                    .font(.caption)
-                    .foregroundColor(theme.secondaryText)
+            HStack {
+                if let username = manager.claudeUsername {
+                    Text("User: \(username)")
+                        .font(.caption)
+                        .foregroundColor(theme.secondaryText)
+                } else if let subscriptionType = manager.subscriptionType {
+                    Text("Plan: \(subscriptionType.capitalized)")
+                        .font(.caption)
+                        .foregroundColor(theme.secondaryText)
+                }
+                
+                Spacer()
+                
+                Button(action: {
+                    openURL(URL(string: "https://x.com/richhickson")!)
+                }) {
+                    Text("Created by @richhickson")
+                        .font(.caption)
+                        .foregroundColor(theme.secondaryText)
+                }
+                .buttonStyle(.borderless)
             }
-            .buttonStyle(.borderless)
+            .padding(.horizontal)
             .padding(.bottom, 8)
         }
         .background(theme.headerBackground)

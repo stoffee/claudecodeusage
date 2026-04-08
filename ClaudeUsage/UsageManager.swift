@@ -27,6 +27,8 @@ class UsageManager: ObservableObject {
     @Published var error: String?
     @Published var isLoading = false
     @Published var lastUpdated: Date?
+    @Published var subscriptionType: String?
+    @Published var claudeUsername: String?
     static let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
     static let claudeCodeVersion: String = {
         // Detect installed Claude Code version for User-Agent
@@ -76,7 +78,20 @@ class UsageManager: ObservableObject {
         defer { isLoading = false }
 
         do {
-            var token = try await getAccessToken()
+            let creds = try readKeychainCredentials()
+            subscriptionType = creds.subscriptionType
+            claudeUsername = fetchClaudeUsername() ?? creds.email
+            var token = creds.accessToken
+            
+            // Check if token is expired
+            if let expiresAt = creds.expiresAt, Date().timeIntervalSince1970 * 1000 >= Double(expiresAt) {
+                if creds.refreshToken != nil {
+                    token = try await refreshAccessToken(credentials: creds)
+                } else {
+                    throw KeychainError.invalidCredentialFormat
+                }
+            }
+            
             do {
                 let data = try await fetchUsage(token: token)
                 usage = data
@@ -125,6 +140,35 @@ class UsageManager: ObservableObject {
     private static let oauthClientId = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
     private static let oauthTokenURL = "https://platform.claude.com/v1/oauth/token"
 
+    private func fetchClaudeUsername() -> String? {
+        // Try known installation paths for the claude binary
+        let candidatePaths = [
+            "\(NSHomeDirectory())/.local/bin/claude",
+            "/usr/local/bin/claude",
+            "/opt/homebrew/bin/claude"
+        ]
+        guard let claudePath = candidatePaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            return nil
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: claudePath)
+        process.arguments = ["whoami"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            process.waitUntilExit()
+            if let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) {
+                let username = output.components(separatedBy: .newlines)
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .first(where: { !$0.isEmpty })
+                if let username, !username.isEmpty { return username }
+            }
+        } catch {}
+        return nil
+    }
+
     private func getAccessToken() async throws -> String {
         let creds = try readKeychainCredentials()
 
@@ -146,6 +190,22 @@ class UsageManager: ObservableObject {
         let expiresAt: Int64? // milliseconds since epoch
         let service: String
         let account: String?
+        let subscriptionType: String?
+        let email: String?
+    }
+
+    private static func extractEmailFromJWT(_ token: String) -> String? {
+        let parts = token.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 3 else { return nil }
+        var base64 = String(parts[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let remainder = base64.count % 4
+        if remainder != 0 { base64 += String(repeating: "=", count: 4 - remainder) }
+        guard let data = Data(base64Encoded: base64),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let email = json["email"] as? String else { return nil }
+        return email
     }
 
     /// Read credentials from Claude Code's keychain using security CLI
@@ -211,7 +271,9 @@ class UsageManager: ObservableObject {
             refreshToken: oauth["refreshToken"] as? String,
             expiresAt: oauth["expiresAt"] as? Int64,
             service: foundService,
-            account: foundAccount
+            account: foundAccount,
+            subscriptionType: oauth["subscriptionType"] as? String,
+            email: Self.extractEmailFromJWT(accessToken)
         )
     }
 

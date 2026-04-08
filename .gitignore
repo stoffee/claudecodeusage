@@ -16,3 +16,7 @@ DerivedData/
 .DS_Store
 *.swp
 *~
+
+# Bob-Shell files
+.bob/
+.bobignore
