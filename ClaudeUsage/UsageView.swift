@@ -146,13 +146,25 @@ struct UsageView: View {
             .padding()
             .background(theme.headerBackground)
 
-            // Tab picker
-            Picker("", selection: $selectedTab) {
+            // Tab picker — custom so Stoffee theme colors apply
+            HStack(spacing: 0) {
                 ForEach(AppTab.allCases, id: \.self) { tab in
-                    Text(tab.rawValue).tag(tab)
+                    Button(action: { selectedTab = tab }) {
+                        Text(tab.rawValue)
+                            .font(.subheadline)
+                            .fontWeight(selectedTab == tab ? .semibold : .regular)
+                            .foregroundColor(selectedTab == tab ? .white : theme.secondaryText)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .background(selectedTab == tab ? theme.accent : Color.clear)
+                            .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .pickerStyle(.segmented)
+            .padding(3)
+            .background(theme.barTrack)
+            .cornerRadius(8)
             .padding(.horizontal)
             .padding(.vertical, 8)
 
@@ -426,10 +438,12 @@ struct UsageView: View {
                     }
                 } label: {
                     Image(systemName: theme.themeIcon)
-                        .foregroundColor(theme == .stoffee ? theme.accent : theme.secondaryText)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(theme.accent)
                 }
                 .menuStyle(.borderlessButton)
-                .frame(width: 20)
+                .menuIndicator(.hidden)
+                .frame(width: 24)
 
                 Button(action: {
                     NSApplication.shared.terminate(nil)
