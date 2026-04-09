@@ -241,6 +241,10 @@ struct UsageView: View {
                     theme: theme
                 )
             }
+
+            if let ts = manager.tokenStats {
+                TokenStatsRow(stats: ts, theme: theme)
+            }
         }
         .padding()
     }
@@ -711,6 +715,73 @@ struct OverageRow: View {
         .padding(12)
         .background(theme.cardBackground)
         .cornerRadius(8)
+    }
+}
+
+// MARK: - Token Stats Row
+
+struct TokenStatsRow: View {
+    let stats: TokenStats
+    var theme: AppTheme = .standard
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Token Usage")
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundColor(theme.primaryText)
+
+            HStack(spacing: 0) {
+                tokenCell(label: "Today", value: stats.todayTokens)
+                Divider().frame(height: 36)
+                tokenCell(label: "This Week", value: stats.weekTokens)
+                Divider().frame(height: 36)
+                VStack(spacing: 2) {
+                    Text(formatTokens(stats.mostActiveDayTokens))
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(theme.accent)
+                    Text("Best: \(stats.mostActiveDay)")
+                        .font(.caption2)
+                        .foregroundColor(theme.secondaryText)
+                }
+                .frame(maxWidth: .infinity)
+                Divider().frame(height: 36)
+                VStack(spacing: 2) {
+                    Text("\(stats.currentStreak)")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(stats.currentStreak > 0 ? theme.accent : theme.secondaryText)
+                    Text("Day Streak")
+                        .font(.caption2)
+                        .foregroundColor(theme.secondaryText)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(12)
+        .background(theme.cardBackground)
+        .cornerRadius(8)
+    }
+
+    @ViewBuilder
+    func tokenCell(label: String, value: Int) -> some View {
+        VStack(spacing: 2) {
+            Text(formatTokens(value))
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(theme.primaryText)
+            Text(label)
+                .font(.caption2)
+                .foregroundColor(theme.secondaryText)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    func formatTokens(_ n: Int) -> String {
+        if n >= 1_000_000 { return String(format: "%.1fM", Double(n) / 1_000_000) }
+        if n >= 1_000     { return String(format: "%.1fk", Double(n) / 1_000) }
+        return "\(n)"
     }
 }
 

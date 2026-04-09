@@ -21,6 +21,14 @@ struct UsageData {
     }
 }
 
+struct TokenStats {
+    let todayTokens: Int
+    let weekTokens: Int
+    let mostActiveDay: String      // e.g. "Apr 8"
+    let mostActiveDayTokens: Int
+    let currentStreak: Int         // consecutive active days up to today
+}
+
 @MainActor
 class UsageManager: ObservableObject {
     @Published var usage: UsageData?
@@ -29,6 +37,7 @@ class UsageManager: ObservableObject {
     @Published var lastUpdated: Date?
     @Published var subscriptionType: String?
     @Published var claudeUsername: String?
+    @Published var tokenStats: TokenStats?
     static let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
     static let claudeCodeVersion: String = {
         // Detect installed Claude Code version for User-Agent
@@ -94,9 +103,11 @@ class UsageManager: ObservableObject {
             do {
                 async let usageData = fetchUsage(token: token)
                 async let profileEmail = fetchProfileEmail(token: token)
-                let (data, email) = try await (usageData, profileEmail)
+                async let tStats = fetchTokenStats()
+                let (data, email, ts) = try await (usageData, profileEmail, tStats)
                 usage = data
                 claudeUsername = email
+                tokenStats = ts
                 lastUpdated = Date()
             } catch UsageError.apiError(statusCode: 401) {
                 // Token might be stale even if not past expiresAt - force refresh
@@ -105,9 +116,11 @@ class UsageManager: ObservableObject {
                     token = try await refreshAccessToken(credentials: creds)
                     async let usageData = fetchUsage(token: token)
                     async let profileEmail = fetchProfileEmail(token: token)
-                    let (data, email) = try await (usageData, profileEmail)
+                    async let tStats = fetchTokenStats()
+                    let (data, email, ts) = try await (usageData, profileEmail, tStats)
                     usage = data
                     claudeUsername = email
+                    tokenStats = ts
                     lastUpdated = Date()
                 } else {
                     throw UsageError.apiError(statusCode: 401)
@@ -144,6 +157,114 @@ class UsageManager: ObservableObject {
 
     private static let oauthClientId = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
     private static let oauthTokenURL = "https://platform.claude.com/v1/oauth/token"
+
+    func fetchTokenStats() async -> TokenStats? {
+        await Task.detached(priority: .utility) {
+            var dailyTotals: [String: Int] = [:]
+            var activeDays: Set<String> = []
+
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            let cacheURL = home.appendingPathComponent(".claude/stats-cache.json")
+
+            let ymd = DateFormatter()
+            ymd.dateFormat = "yyyy-MM-dd"
+            ymd.locale = Locale(identifier: "en_US_POSIX")
+
+            // 1. Seed from stats-cache
+            var lastCachedDate: String? = nil
+            if let data = try? Data(contentsOf: cacheURL),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                lastCachedDate = json["lastComputedDate"] as? String
+                if let entries = json["dailyModelTokens"] as? [[String: Any]] {
+                    for entry in entries {
+                        guard let date = entry["date"] as? String,
+                              let byModel = entry["tokensByModel"] as? [String: Any] else { continue }
+                        let total = byModel.values.compactMap { $0 as? Int }.reduce(0, +)
+                        dailyTotals[date, default: 0] += total
+                    }
+                }
+                if let activity = json["dailyActivity"] as? [[String: Any]] {
+                    for entry in activity {
+                        if let date = entry["date"] as? String { activeDays.insert(date) }
+                    }
+                }
+            }
+
+            // 2. Scan session JSONL files for dates after the cache
+            let projectsURL = home.appendingPathComponent(".claude/projects")
+            let fm = FileManager.default
+            if let enumerator = fm.enumerator(at: projectsURL,
+                                               includingPropertiesForKeys: [.contentModificationDateKey],
+                                               options: [.skipsHiddenFiles]) {
+                let isoFull = ISO8601DateFormatter()
+                isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                let isoBasic = ISO8601DateFormatter()
+                isoBasic.formatOptions = [.withInternetDateTime]
+
+                for case let url as URL in enumerator {
+                    guard url.pathExtension == "jsonl" else { continue }
+                    if let lastCached = lastCachedDate,
+                       let modDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate {
+                        if ymd.string(from: modDate) <= lastCached { continue }
+                    }
+                    guard let content = try? String(contentsOf: url, encoding: .utf8) else { continue }
+                    for line in content.split(separator: "\n", omittingEmptySubsequences: true) {
+                        guard let data = line.data(using: .utf8),
+                              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                              let tsStr = obj["timestamp"] as? String,
+                              let ts = isoFull.date(from: tsStr) ?? isoBasic.date(from: tsStr) else { continue }
+                        let day = ymd.string(from: ts)
+                        activeDays.insert(day)
+                        if let msg = obj["message"] as? [String: Any],
+                           let usage = msg["usage"] as? [String: Any] {
+                            let tokens = (usage["input_tokens"] as? Int ?? 0)
+                                       + (usage["cache_creation_input_tokens"] as? Int ?? 0)
+                                       + (usage["output_tokens"] as? Int ?? 0)
+                            dailyTotals[day, default: 0] += tokens
+                        }
+                    }
+                }
+            }
+
+            guard !dailyTotals.isEmpty else { return nil }
+
+            // 3. Today + current Sun-Sat week tokens
+            let todayStr = ymd.string(from: Date())
+            let todayTokens = dailyTotals[todayStr] ?? 0
+
+            var cal = Calendar(identifier: .gregorian)
+            cal.firstWeekday = 1
+            let weekInterval = cal.dateInterval(of: .weekOfYear, for: Date())
+            let weekStart = weekInterval?.start ?? Date()
+            let weekEnd = weekInterval?.end ?? Date()
+            let weekTokens = dailyTotals.filter { entry in
+                guard let d = ymd.date(from: entry.key) else { return false }
+                return d >= weekStart && d < weekEnd
+            }.values.reduce(0, +)
+
+            // 4. Most active day
+            guard let best = dailyTotals.max(by: { $0.value < $1.value }) else { return nil }
+            let display = DateFormatter()
+            display.dateFormat = "MMM d"
+            let bestLabel = ymd.date(from: best.key).map { display.string(from: $0) } ?? best.key
+
+            // 5. Current streak — consecutive active days ending today or yesterday
+            var streak = 0
+            var checkDate = Date()
+            // If today has no activity yet, start counting from yesterday
+            if !activeDays.contains(ymd.string(from: checkDate)) {
+                checkDate = cal.date(byAdding: .day, value: -1, to: checkDate) ?? checkDate
+            }
+            while activeDays.contains(ymd.string(from: checkDate)) {
+                streak += 1
+                checkDate = cal.date(byAdding: .day, value: -1, to: checkDate) ?? checkDate
+            }
+
+            return TokenStats(todayTokens: todayTokens, weekTokens: weekTokens,
+                              mostActiveDay: bestLabel, mostActiveDayTokens: best.value,
+                              currentStreak: streak)
+        }.value
+    }
 
     private func fetchProfileEmail(token: String) async -> String? {
         var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/profile")!)
