@@ -108,11 +108,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem?.button else { return }
 
         if let usage = usageManager.usage {
-            // Overage mode: pink $$ + budget %  (+ dollar amount if space allows)
+            // Overage mode: only when session is maxed (≥90%) AND extra usage is being drawn
             if usage.extraUsageEnabled,
                let limit = usage.extraUsageMonthlyLimit,
                let used = usage.extraUsageUsedCredits,
-               limit > 0, used > 0 {
+               limit > 0, used > 0, usage.sessionPercentage >= 90 {
                 let pct = min(Int((used / limit) * 100), 999)
                 let dollars = String(format: "$%.2f", used / 100)
                 let pink = NSColor(red: 1.0, green: 0.2, blue: 0.6, alpha: 1.0)
