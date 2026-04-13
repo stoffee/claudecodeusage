@@ -108,12 +108,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem?.button else { return }
 
         if let usage = usageManager.usage {
-            let sessionPct = usage.sessionPercentage
-            let emoji = usageManager.statusEmoji
-            button.title = "\(emoji) \(sessionPct)%"
+            // Overage mode: pink $$ + budget %  (+ dollar amount if space allows)
+            if usage.extraUsageEnabled,
+               let limit = usage.extraUsageMonthlyLimit,
+               let used = usage.extraUsageUsedCredits,
+               limit > 0, used > 0 {
+                let pct = min(Int((used / limit) * 100), 999)
+                let dollars = String(format: "$%.2f", used / 100)
+                let pink = NSColor(red: 1.0, green: 0.2, blue: 0.6, alpha: 1.0)
+                let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+                let attrs: [NSAttributedString.Key: Any] = [.foregroundColor: pink, .font: font]
+                button.attributedTitle = NSAttributedString(string: "$$ \(pct)% \(dollars)", attributes: attrs)
+            } else {
+                // Normal mode: clear any attributed title, use plain text
+                button.attributedTitle = NSAttributedString(string: "")
+                let sessionPct = usage.sessionPercentage
+                button.title = "\(usageManager.statusEmoji) \(sessionPct)%"
+            }
         } else if usageManager.error != nil {
+            button.attributedTitle = NSAttributedString(string: "")
             button.title = "\u{274C}"
         } else {
+            button.attributedTitle = NSAttributedString(string: "")
             button.title = "\u{23F3}"
         }
     }
