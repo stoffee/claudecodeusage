@@ -71,9 +71,9 @@ class UsageManager: ObservableObject {
     var statusEmoji: String {
         guard let usage = usage else { return "❓" }
         let maxUtil = max(usage.sessionUtilization, usage.weeklyUtilization)
-        if maxUtil >= 90 { return "🔴" }
-        if maxUtil >= 70 { return "🟡" }
-        return "🟢"
+        let themeName = UserDefaults.standard.string(forKey: "appTheme") ?? "Default"
+        let theme = AppTheme(rawValue: themeName) ?? .standard
+        return theme.statusEmoji(for: maxUtil)
     }
 
     func refresh() async {

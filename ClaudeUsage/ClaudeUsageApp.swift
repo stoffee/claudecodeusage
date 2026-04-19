@@ -110,11 +110,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let usage = usageManager.usage {
             let sessionPct = usage.sessionPercentage
             let emoji = usageManager.statusEmoji
-            button.title = "\(emoji) \(sessionPct)%"
+            let countdown = formatResetTime(usage.sessionResetsAt)
+            button.title = "\(emoji) \(sessionPct)%\(countdown)"
         } else if usageManager.error != nil {
             button.title = "\u{274C}"
         } else {
             button.title = "\u{23F3}"
+        }
+    }
+
+    func formatResetTime(_ date: Date?) -> String {
+        guard let date = date else { return "" }
+        let remaining = date.timeIntervalSince(Date())
+        guard remaining > 0 else { return "" }
+
+        let hours = Int(remaining / 3600)
+        let minutes = Int((remaining.truncatingRemainder(dividingBy: 3600)) / 60)
+
+        if hours >= 1 {
+            return " \(hours)h"
+        } else {
+            return " \(max(minutes, 1))m"
         }
     }
 
