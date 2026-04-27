@@ -9,15 +9,17 @@ struct SessionEntry: Identifiable {
     let messageCount: Int
     let modifiedDate: Date
     let gitBranch: String
+    let summary: String?      // set via /name in Claude Code
 
     var id: String { sessionId }
 
     var displayTitle: String {
-        if !firstPrompt.isEmpty {
-            return String(firstPrompt.prefix(80))
-        }
+        if let s = summary, !s.isEmpty { return s }
+        if !firstPrompt.isEmpty { return String(firstPrompt.prefix(80)) }
         return "Untitled Session"
     }
+
+    var hasCustomName: Bool { !(summary ?? "").isEmpty }
 
     var shortProjectName: String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -44,26 +46,34 @@ struct SessionEntry: Identifiable {
 
 // Free functions to avoid @MainActor isolation in Task.detached
 
-private func parseSessionFile(_ path: String) -> (prompt: String, messageCount: Int, cwd: String, branch: String) {
+private func parseSessionFile(_ path: String) -> (prompt: String, messageCount: Int, cwd: String, branch: String, customTitle: String?) {
     guard let fh = FileHandle(forReadingAtPath: path) else {
-        return ("", 0, "", "")
+        return ("", 0, "", "", nil)
     }
     defer { fh.closeFile() }
 
-    let data = fh.readData(ofLength: 64 * 1024)
+    // Read full file to catch custom-title entries (may appear anywhere, last one wins)
+    let fileSize = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int ?? 0
+    let data = fh.readDataToEndOfFile()
     guard let content = String(data: data, encoding: .utf8) else {
-        return ("", 0, "", "")
+        return ("", 0, "", "", nil)
     }
 
     var prompt = ""
     var cwd = ""
     var branch = ""
     var messageCount = 0
+    var customTitle: String? = nil
 
     for line in content.split(separator: "\n") {
         guard let obj = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else { continue }
 
         let type = obj["type"] as? String ?? ""
+
+        if type == "custom-title", let title = obj["customTitle"] as? String, !title.isEmpty {
+            customTitle = title   // last entry wins
+        }
+
         if type == "user" || type == "assistant" {
             messageCount += 1
         }
@@ -96,13 +106,11 @@ private func parseSessionFile(_ path: String) -> (prompt: String, messageCount: 
         }
     }
 
-    if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
-       let fileSize = attrs[.size] as? Int, fileSize > 64 * 1024 {
-        let ratio = Double(fileSize) / Double(data.count)
-        messageCount = Int(Double(messageCount) * ratio)
-    }
+    // Estimate message count for large files that were truncated in old code
+    // (now we read full file so no estimation needed, but keep for very large files)
+    _ = fileSize
 
-    return (prompt, messageCount, cwd, branch)
+    return (prompt, messageCount, cwd, branch, customTitle)
 }
 
 private func decodeProjectPath(_ encoded: String) -> String {
@@ -131,25 +139,38 @@ class SessionManager: ObservableObject {
                 return
             }
 
+            // Build sessionId → summary lookup from all sessions-index.json files
+            var summaryIndex: [String: String] = [:]
+            for dir in dirs {
+                let indexPath = "\(projectsDir)/\(dir)/sessions-index.json"
+                guard let data = fm.contents(atPath: indexPath),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let entries = json["entries"] as? [[String: Any]] else { continue }
+                for entry in entries {
+                    if let sid = entry["sessionId"] as? String,
+                       let summary = entry["summary"] as? String,
+                       !summary.isEmpty {
+                        summaryIndex[sid] = summary
+                    }
+                }
+            }
+
             for dir in dirs {
                 let dirPath = "\(projectsDir)/\(dir)"
                 guard let files = try? fm.contentsOfDirectory(atPath: dirPath) else { continue }
 
-                // Decode project path from directory name (dashes become slashes)
                 let projectPath = decodeProjectPath(dir)
 
                 for file in files {
                     guard file.hasSuffix(".jsonl"),
                           !file.contains("subagent") else { continue }
                     let filePath = "\(dirPath)/\(file)"
-                    let sessionId = String(file.dropLast(6)) // remove .jsonl
+                    let sessionId = String(file.dropLast(6))
 
-                    // Get file modification date
                     guard let attrs = try? fm.attributesOfItem(atPath: filePath),
                           let modDate = attrs[.modificationDate] as? Date else { continue }
 
-                    // Read first few lines to get metadata
-                    let (prompt, msgCount, cwd, branch) = parseSessionFile(filePath)
+                    let (prompt, msgCount, cwd, branch, customTitle) = parseSessionFile(filePath)
 
                     let session = SessionEntry(
                         sessionId: sessionId,
@@ -158,7 +179,8 @@ class SessionManager: ObservableObject {
                         firstPrompt: prompt,
                         messageCount: msgCount,
                         modifiedDate: modDate,
-                        gitBranch: branch
+                        gitBranch: branch,
+                        summary: customTitle ?? summaryIndex[sessionId]
                     )
                     allSessions.append(session)
                 }
