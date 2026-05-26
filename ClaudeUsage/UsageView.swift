@@ -553,11 +553,26 @@ struct SessionRow: View {
             // Session card (clickable)
             Button(action: onTap) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(session.displayTitle)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .lineLimit(2)
-                        .foregroundColor(theme.primaryText)
+                    // Named sessions: show name bold, first prompt as subtitle
+                    if session.hasCustomName {
+                        Text(session.displayTitle)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .lineLimit(1)
+                            .foregroundColor(theme.accent)
+                        if !session.firstPrompt.isEmpty {
+                            Text(session.firstPrompt)
+                                .font(.caption)
+                                .lineLimit(1)
+                                .foregroundColor(theme.secondaryText)
+                        }
+                    } else {
+                        Text(session.displayTitle)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .lineLimit(2)
+                            .foregroundColor(theme.primaryText)
+                    }
 
                     HStack(spacing: 8) {
                         Label(session.shortProjectName, systemImage: "folder")
