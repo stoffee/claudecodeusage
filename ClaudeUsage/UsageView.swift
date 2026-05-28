@@ -339,7 +339,8 @@ struct UsageView: View {
                 percentage: usage.sessionPercentage,
                 resetsAt: usage.sessionResetsAt,
                 color: theme.colorForPercentage(usage.sessionPercentage),
-                theme: theme
+                theme: theme,
+                gaugeStyle: theme.defaultGauge
             )
 
             UsageRow(
@@ -348,7 +349,8 @@ struct UsageView: View {
                 percentage: usage.weeklyPercentage,
                 resetsAt: usage.weeklyResetsAt,
                 color: theme.colorForPercentage(usage.weeklyPercentage),
-                theme: theme
+                theme: theme,
+                gaugeStyle: theme.defaultGauge
             )
 
             if let sonnetPct = usage.sonnetPercentage {
@@ -358,7 +360,8 @@ struct UsageView: View {
                     percentage: sonnetPct,
                     resetsAt: usage.sonnetResetsAt,
                     color: theme.colorForPercentage(sonnetPct),
-                    theme: theme
+                    theme: theme,
+                    gaugeStyle: theme.defaultGauge
                 )
             }
 
@@ -368,7 +371,8 @@ struct UsageView: View {
                     usedDollars: used / 100,
                     limitDollars: limit / 100,
                     percentage: usage.extraUsagePercentage ?? 0,
-                    theme: theme
+                    theme: theme,
+                    gaugeStyle: theme.defaultGauge
                 )
             }
 
@@ -738,6 +742,7 @@ struct UsageRow: View {
     let resetsAt: Date?
     let color: Color
     var theme: AppTheme = .standard
+    var gaugeStyle: GaugeStyle = .linear
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -761,7 +766,18 @@ struct UsageRow: View {
             }
 
             // Progress bar
-            LinearGauge(percentage: percentage, color: color, theme: theme)
+            Group {
+                switch gaugeStyle {
+                case .linear:
+                    LinearGauge(percentage: percentage, color: color, theme: theme)
+                case .segmented:
+                    SegmentedGauge(percentage: percentage, color: color, theme: theme)
+                case .liquid:
+                    LiquidGauge(percentage: percentage, color: color, theme: theme)
+                case .ascii:
+                    ASCIIGauge(percentage: percentage, title: title)
+                }
+            }
 
             // Reset time
             if let resetsAt = resetsAt {
@@ -803,6 +819,7 @@ struct OverageRow: View {
     let limitDollars: Double
     let percentage: Int
     var theme: AppTheme = .standard
+    var gaugeStyle: GaugeStyle = .linear
 
     var color: Color { theme.overageColor(percentage) }
 
@@ -833,7 +850,18 @@ struct OverageRow: View {
             }
 
             // Progress bar
-            LinearGauge(percentage: min(percentage, 100), color: color, theme: theme)
+            Group {
+                switch gaugeStyle {
+                case .linear:
+                    LinearGauge(percentage: min(percentage, 100), color: color, theme: theme)
+                case .segmented:
+                    SegmentedGauge(percentage: min(percentage, 100), color: color, theme: theme)
+                case .liquid:
+                    LiquidGauge(percentage: min(percentage, 100), color: color, theme: theme)
+                case .ascii:
+                    ASCIIGauge(percentage: min(percentage, 100), title: "Overage")
+                }
+            }
         }
         .padding(12)
         .background(theme.cardBackground)
