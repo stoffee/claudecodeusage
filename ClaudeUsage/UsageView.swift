@@ -597,6 +597,34 @@ struct UsageView: View {
             .padding(.horizontal)
             .padding(.bottom, 8)
 
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Icon Pack")
+                    .font(.caption)
+                    .foregroundColor(theme.secondaryText)
+
+                HStack(spacing: 6) {
+                    Picker("", selection: $iconOverride) {
+                        Text("Theme default (\(theme.defaultIconPack.displayName))").tag("")
+                        ForEach(IconPack.allCases) { p in
+                            Text(p.displayName).tag(p.rawValue)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+
+                    if !iconOverride.isEmpty {
+                        Button(action: { iconOverride = "" }) {
+                            Image(systemName: "arrow.counterclockwise")
+                                .foregroundColor(theme.secondaryText)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Reset to theme default")
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+
             HStack {
                 if let lastUpdated = manager.lastUpdated {
                     Text("Updated \(lastUpdated.formatted(.relative(presentation: .named)))")
