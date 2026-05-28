@@ -569,6 +569,34 @@ struct UsageView: View {
             .padding(.horizontal)
             .padding(.bottom, 8)
 
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Gauge Style")
+                    .font(.caption)
+                    .foregroundColor(theme.secondaryText)
+
+                HStack(spacing: 6) {
+                    Picker("", selection: $gaugeOverride) {
+                        Text("Theme default (\(theme.defaultGauge.displayName))").tag("")
+                        ForEach(GaugeStyle.allCases) { g in
+                            Text(g.displayName).tag(g.rawValue)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+
+                    if !gaugeOverride.isEmpty {
+                        Button(action: { gaugeOverride = "" }) {
+                            Image(systemName: "arrow.counterclockwise")
+                                .foregroundColor(theme.secondaryText)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Reset to theme default")
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+
             HStack {
                 if let lastUpdated = manager.lastUpdated {
                     Text("Updated \(lastUpdated.formatted(.relative(presentation: .named)))")
