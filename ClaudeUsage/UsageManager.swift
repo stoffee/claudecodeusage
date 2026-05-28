@@ -73,7 +73,7 @@ class UsageManager: ObservableObject {
         let maxUtil = max(usage.sessionUtilization, usage.weeklyUtilization)
         let themeName = UserDefaults.standard.string(forKey: "appTheme") ?? "Default"
         let theme = AppTheme(rawValue: themeName) ?? .standard
-        return theme.statusEmoji(for: maxUtil)
+        return theme.defaultIconPack.statusEmoji(for: maxUtil)
     }
 
     func refresh() async {
