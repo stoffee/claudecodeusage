@@ -876,6 +876,41 @@ struct LinearGauge: View {
     .frame(width: 280)
 }
 
+struct SegmentedGauge: View {
+    let percentage: Int
+    let color: Color
+    var theme: AppTheme = .standard
+    let segmentCount: Int = 10
+
+    var filledSegments: Int {
+        let clamped = max(0, min(percentage, 100))
+        return Int((Double(clamped) / 100.0) * Double(segmentCount).rounded())
+    }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(0..<segmentCount, id: \.self) { index in
+                Rectangle()
+                    .fill(index < filledSegments ? color : theme.barTrack)
+                    .frame(height: 10)
+            }
+        }
+        .frame(height: 10)
+    }
+}
+
+#Preview("SegmentedGauge") {
+    VStack(spacing: 16) {
+        SegmentedGauge(percentage: 0, color: .green)
+        SegmentedGauge(percentage: 25, color: .green)
+        SegmentedGauge(percentage: 67, color: .orange)
+        SegmentedGauge(percentage: 100, color: .red)
+    }
+    .padding()
+    .frame(width: 280)
+    .background(Color(red: 0.13, green: 0.13, blue: 0.22))
+}
+
 // MARK: - Token Stats Row
 
 struct TokenStatsRow: View {
