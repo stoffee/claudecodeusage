@@ -22,6 +22,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // One-shot migration: legacy "System" theme is merged into "Default" (Standard).
+        if UserDefaults.standard.string(forKey: "appTheme") == "System" {
+            UserDefaults.standard.set("Default", forKey: "appTheme")
+        }
+
         // Hide dock icon - menubar only
         NSApp.setActivationPolicy(.accessory)
 

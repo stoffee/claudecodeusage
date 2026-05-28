@@ -72,7 +72,6 @@ enum IconPack: String, CaseIterable, Identifiable {
 
 enum AppTheme: String, CaseIterable {
     case standard = "Default"
-    case system = "System"
     case stoffee = "Stoffee"
     case terminal = "Terminal"
     case retro = "Retro"
@@ -80,7 +79,6 @@ enum AppTheme: String, CaseIterable {
     var headerBackground: Color {
         switch self {
         case .standard: return Color(NSColor.controlBackgroundColor)
-        case .system: return Color(NSColor.controlBackgroundColor)
         case .stoffee: return Color(red: 0.15, green: 0.05, blue: 0.2)
         case .terminal: return Color(red: 0.0, green: 0.0, blue: 0.0)
         case .retro:    return Color(red: 0.1, green: 0.1, blue: 0.18)
@@ -90,7 +88,6 @@ enum AppTheme: String, CaseIterable {
     var cardBackground: Color {
         switch self {
         case .standard: return Color(NSColor.controlBackgroundColor)
-        case .system: return Color(NSColor.controlBackgroundColor)
         case .stoffee: return Color(red: 0.2, green: 0.08, blue: 0.28)
         case .terminal: return Color(red: 0.04, green: 0.04, blue: 0.04)
         case .retro:    return Color(red: 0.13, green: 0.13, blue: 0.22)
@@ -100,7 +97,6 @@ enum AppTheme: String, CaseIterable {
     var popoverBackground: Color {
         switch self {
         case .standard: return Color(NSColor.windowBackgroundColor)
-        case .system: return Color(NSColor.windowBackgroundColor)
         case .stoffee: return Color(red: 0.12, green: 0.03, blue: 0.18)
         case .terminal: return Color(red: 0.0, green: 0.0, blue: 0.0)
         case .retro:    return Color(red: 0.08, green: 0.08, blue: 0.16)
@@ -109,7 +105,7 @@ enum AppTheme: String, CaseIterable {
 
     var primaryText: Color {
         switch self {
-        case .standard, .system: return Color.primary
+        case .standard: return Color.primary
         case .stoffee: return Color(red: 1.0, green: 0.85, blue: 1.0)
         case .terminal: return Color(red: 0.0, green: 1.0, blue: 0.0)
         case .retro:    return Color.white
@@ -118,7 +114,7 @@ enum AppTheme: String, CaseIterable {
 
     var secondaryText: Color {
         switch self {
-        case .standard, .system: return Color.secondary
+        case .standard: return Color.secondary
         case .stoffee: return Color(red: 0.75, green: 0.55, blue: 0.85)
         case .terminal: return Color(red: 0.0, green: 0.7, blue: 0.0)
         case .retro:    return Color(red: 0.6, green: 0.6, blue: 0.85)
@@ -128,7 +124,6 @@ enum AppTheme: String, CaseIterable {
     var accent: Color {
         switch self {
         case .standard: return .accentColor
-        case .system: return .accentColor
         case .stoffee: return Color(red: 1.0, green: 0.2, blue: 0.6) // hot pink
         case .terminal: return Color(red: 0.0, green: 1.0, blue: 0.0)
         case .retro:    return Color(red: 1.0, green: 0.8, blue: 0.0)
@@ -137,7 +132,7 @@ enum AppTheme: String, CaseIterable {
 
     var barTrack: Color {
         switch self {
-        case .standard, .system: return Color(NSColor.separatorColor)
+        case .standard: return Color(NSColor.separatorColor)
         case .stoffee: return Color(red: 0.3, green: 0.12, blue: 0.4)
         case .terminal: return Color(red: 0.1, green: 0.2, blue: 0.1)
         case .retro:    return Color(red: 0.2, green: 0.2, blue: 0.3)
@@ -146,7 +141,7 @@ enum AppTheme: String, CaseIterable {
 
     var searchBackground: Color {
         switch self {
-        case .standard, .system: return Color(NSColor.textBackgroundColor)
+        case .standard: return Color(NSColor.textBackgroundColor)
         case .stoffee: return Color(red: 0.22, green: 0.1, blue: 0.3)
         case .terminal: return Color(red: 0.05, green: 0.1, blue: 0.05)
         case .retro:    return Color(red: 0.15, green: 0.15, blue: 0.25)
@@ -155,7 +150,7 @@ enum AppTheme: String, CaseIterable {
 
     func colorForPercentage(_ pct: Int) -> Color {
         switch self {
-        case .standard, .system:
+        case .standard:
             if pct >= 90 { return .red }
             if pct >= 70 { return .orange }
             return .green
@@ -176,7 +171,7 @@ enum AppTheme: String, CaseIterable {
 
     func overageColor(_ pct: Int) -> Color {
         switch self {
-        case .standard, .system:
+        case .standard:
             if pct >= 90 { return .red }
             if pct >= 70 { return .orange }
             return .blue
@@ -197,7 +192,7 @@ enum AppTheme: String, CaseIterable {
 
     func statusEmoji(for maxUtil: Double) -> String {
         switch self {
-        case .standard, .system:
+        case .standard:
             if maxUtil >= 90 { return "🔴" }
             if maxUtil >= 70 { return "🟡" }
             return "🟢"
@@ -219,7 +214,6 @@ enum AppTheme: String, CaseIterable {
     var themeIcon: String {
         switch self {
         case .standard: return "paintbrush"
-        case .system: return "gearshape"
         case .stoffee: return "sparkles"
         case .terminal: return "terminal"
         case .retro:    return "gamecontroller"
@@ -228,7 +222,7 @@ enum AppTheme: String, CaseIterable {
 
     var defaultGauge: GaugeStyle {
         switch self {
-        case .standard, .system: return .linear
+        case .standard: return .linear
         case .stoffee:           return .liquid
         case .terminal:          return .ascii
         case .retro:             return .segmented
@@ -237,7 +231,7 @@ enum AppTheme: String, CaseIterable {
 
     var defaultIconPack: IconPack {
         switch self {
-        case .standard, .system: return .classic
+        case .standard: return .classic
         case .stoffee:           return .stoffee
         case .terminal:          return .terminal
         case .retro:             return .retro
