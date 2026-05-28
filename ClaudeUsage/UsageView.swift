@@ -7,6 +7,26 @@ enum AppTab: String, CaseIterable {
     case sessions = "Sessions"
 }
 
+// MARK: - Gauge Style
+
+enum GaugeStyle: String, CaseIterable, Identifiable {
+    case linear
+    case segmented
+    case liquid
+    case ascii
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .linear:    return "Linear"
+        case .segmented: return "Segmented"
+        case .liquid:    return "Liquid Fill"
+        case .ascii:     return "ASCII"
+        }
+    }
+}
+
 // MARK: - Theme
 
 enum AppTheme: String, CaseIterable {
