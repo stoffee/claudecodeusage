@@ -74,12 +74,16 @@ enum AppTheme: String, CaseIterable {
     case standard = "Default"
     case system = "System"
     case stoffee = "Stoffee"
+    case terminal = "Terminal"
+    case retro = "Retro"
 
     var headerBackground: Color {
         switch self {
         case .standard: return Color(NSColor.controlBackgroundColor)
         case .system: return Color(NSColor.controlBackgroundColor)
         case .stoffee: return Color(red: 0.15, green: 0.05, blue: 0.2)
+        case .terminal: return Color(red: 0.0, green: 0.0, blue: 0.0)
+        case .retro:    return Color(red: 0.1, green: 0.1, blue: 0.18)
         }
     }
 
@@ -88,6 +92,8 @@ enum AppTheme: String, CaseIterable {
         case .standard: return Color(NSColor.controlBackgroundColor)
         case .system: return Color(NSColor.controlBackgroundColor)
         case .stoffee: return Color(red: 0.2, green: 0.08, blue: 0.28)
+        case .terminal: return Color(red: 0.04, green: 0.04, blue: 0.04)
+        case .retro:    return Color(red: 0.13, green: 0.13, blue: 0.22)
         }
     }
 
@@ -96,6 +102,8 @@ enum AppTheme: String, CaseIterable {
         case .standard: return Color(NSColor.windowBackgroundColor)
         case .system: return Color(NSColor.windowBackgroundColor)
         case .stoffee: return Color(red: 0.12, green: 0.03, blue: 0.18)
+        case .terminal: return Color(red: 0.0, green: 0.0, blue: 0.0)
+        case .retro:    return Color(red: 0.08, green: 0.08, blue: 0.16)
         }
     }
 
@@ -103,6 +111,8 @@ enum AppTheme: String, CaseIterable {
         switch self {
         case .standard, .system: return Color.primary
         case .stoffee: return Color(red: 1.0, green: 0.85, blue: 1.0)
+        case .terminal: return Color(red: 0.0, green: 1.0, blue: 0.0)
+        case .retro:    return Color.white
         }
     }
 
@@ -110,6 +120,8 @@ enum AppTheme: String, CaseIterable {
         switch self {
         case .standard, .system: return Color.secondary
         case .stoffee: return Color(red: 0.75, green: 0.55, blue: 0.85)
+        case .terminal: return Color(red: 0.0, green: 0.7, blue: 0.0)
+        case .retro:    return Color(red: 0.6, green: 0.6, blue: 0.85)
         }
     }
 
@@ -118,6 +130,8 @@ enum AppTheme: String, CaseIterable {
         case .standard: return .accentColor
         case .system: return .accentColor
         case .stoffee: return Color(red: 1.0, green: 0.2, blue: 0.6) // hot pink
+        case .terminal: return Color(red: 0.0, green: 1.0, blue: 0.0)
+        case .retro:    return Color(red: 1.0, green: 0.8, blue: 0.0)
         }
     }
 
@@ -125,6 +139,8 @@ enum AppTheme: String, CaseIterable {
         switch self {
         case .standard, .system: return Color(NSColor.separatorColor)
         case .stoffee: return Color(red: 0.3, green: 0.12, blue: 0.4)
+        case .terminal: return Color(red: 0.1, green: 0.2, blue: 0.1)
+        case .retro:    return Color(red: 0.2, green: 0.2, blue: 0.3)
         }
     }
 
@@ -132,6 +148,8 @@ enum AppTheme: String, CaseIterable {
         switch self {
         case .standard, .system: return Color(NSColor.textBackgroundColor)
         case .stoffee: return Color(red: 0.22, green: 0.1, blue: 0.3)
+        case .terminal: return Color(red: 0.05, green: 0.1, blue: 0.05)
+        case .retro:    return Color(red: 0.15, green: 0.15, blue: 0.25)
         }
     }
 
@@ -145,6 +163,14 @@ enum AppTheme: String, CaseIterable {
             if pct >= 90 { return Color(red: 1.0, green: 0.1, blue: 0.3) }   // neon red-pink
             if pct >= 70 { return Color(red: 1.0, green: 0.4, blue: 0.9) }   // neon magenta
             return Color(red: 0.6, green: 0.2, blue: 1.0)                     // electric purple
+        case .terminal:
+            if pct >= 90 { return Color(red: 1.0, green: 0.2, blue: 0.0) }
+            if pct >= 70 { return Color(red: 1.0, green: 1.0, blue: 0.0) }
+            return Color(red: 0.0, green: 1.0, blue: 0.0)
+        case .retro:
+            if pct >= 90 { return Color(red: 1.0, green: 0.0, blue: 0.27) }
+            if pct >= 70 { return Color(red: 1.0, green: 0.8, blue: 0.0) }
+            return Color(red: 0.35, green: 0.8, blue: 0.4)
         }
     }
 
@@ -158,6 +184,14 @@ enum AppTheme: String, CaseIterable {
             if pct >= 90 { return Color(red: 1.0, green: 0.1, blue: 0.3) }
             if pct >= 70 { return Color(red: 1.0, green: 0.4, blue: 0.9) }
             return Color(red: 0.0, green: 0.8, blue: 1.0) // cyan neon
+        case .terminal:
+            if pct >= 90 { return Color(red: 1.0, green: 0.2, blue: 0.0) }
+            if pct >= 70 { return Color(red: 1.0, green: 1.0, blue: 0.0) }
+            return Color(red: 0.0, green: 0.9, blue: 0.9)
+        case .retro:
+            if pct >= 90 { return Color(red: 1.0, green: 0.0, blue: 0.27) }
+            if pct >= 70 { return Color(red: 1.0, green: 0.8, blue: 0.0) }
+            return Color(red: 0.4, green: 0.7, blue: 1.0)
         }
     }
 
@@ -171,6 +205,14 @@ enum AppTheme: String, CaseIterable {
             if maxUtil >= 90 { return "💀" }
             if maxUtil >= 70 { return "🪫" }
             return "🚀"
+        case .terminal:
+            if maxUtil >= 90 { return "[X]" }
+            if maxUtil >= 70 { return "[!]" }
+            return "[OK]"
+        case .retro:
+            if maxUtil >= 90 { return "☠" }
+            if maxUtil >= 70 { return "⚠" }
+            return "♥"
         }
     }
 
@@ -179,6 +221,26 @@ enum AppTheme: String, CaseIterable {
         case .standard: return "paintbrush"
         case .system: return "gearshape"
         case .stoffee: return "sparkles"
+        case .terminal: return "terminal"
+        case .retro:    return "gamecontroller"
+        }
+    }
+
+    var defaultGauge: GaugeStyle {
+        switch self {
+        case .standard, .system: return .linear
+        case .stoffee:           return .liquid
+        case .terminal:          return .ascii
+        case .retro:             return .segmented
+        }
+    }
+
+    var defaultIconPack: IconPack {
+        switch self {
+        case .standard, .system: return .classic
+        case .stoffee:           return .stoffee
+        case .terminal:          return .terminal
+        case .retro:             return .retro
         }
     }
 }
