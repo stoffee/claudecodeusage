@@ -247,6 +247,11 @@ struct UsageView: View {
     @State private var sessionSearchText: String = ""
     @AppStorage("appTheme") private var selectedTheme: String = AppTheme.standard.rawValue
     private var theme: AppTheme { AppTheme(rawValue: selectedTheme) ?? .standard }
+    @AppStorage("gaugeStyleOverride") private var gaugeOverride: String = ""
+    @AppStorage("iconPackOverride")  private var iconOverride: String = ""
+
+    private var effectiveGauge: GaugeStyle { GaugeStyle(rawValue: gaugeOverride) ?? theme.defaultGauge }
+    private var effectiveIconPack: IconPack { IconPack(rawValue: iconOverride) ?? theme.defaultIconPack }
     @State private var launchAtLogin: Bool = {
         if #available(macOS 13.0, *) {
             return SMAppService.mainApp.status == .enabled
@@ -340,7 +345,7 @@ struct UsageView: View {
                 resetsAt: usage.sessionResetsAt,
                 color: theme.colorForPercentage(usage.sessionPercentage),
                 theme: theme,
-                gaugeStyle: theme.defaultGauge
+                gaugeStyle: effectiveGauge
             )
 
             UsageRow(
@@ -350,7 +355,7 @@ struct UsageView: View {
                 resetsAt: usage.weeklyResetsAt,
                 color: theme.colorForPercentage(usage.weeklyPercentage),
                 theme: theme,
-                gaugeStyle: theme.defaultGauge
+                gaugeStyle: effectiveGauge
             )
 
             if let sonnetPct = usage.sonnetPercentage {
@@ -361,7 +366,7 @@ struct UsageView: View {
                     resetsAt: usage.sonnetResetsAt,
                     color: theme.colorForPercentage(sonnetPct),
                     theme: theme,
-                    gaugeStyle: theme.defaultGauge
+                    gaugeStyle: effectiveGauge
                 )
             }
 
@@ -372,7 +377,7 @@ struct UsageView: View {
                     limitDollars: limit / 100,
                     percentage: usage.extraUsagePercentage ?? 0,
                     theme: theme,
-                    gaugeStyle: theme.defaultGauge
+                    gaugeStyle: effectiveGauge
                 )
             }
 
