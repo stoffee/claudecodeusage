@@ -951,6 +951,73 @@ struct ASCIIGauge: View {
     .frame(width: 280)
 }
 
+struct LiquidGauge: View {
+    let percentage: Int
+    let color: Color
+    var theme: AppTheme = .standard
+
+    var body: some View {
+        GeometryReader { geometry in
+            let clamped = max(0, min(percentage, 100))
+            let fillWidth = geometry.size.width * CGFloat(clamped) / 100
+
+            ZStack(alignment: .leading) {
+                // Track + outline
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(color, lineWidth: 1)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(theme.barTrack.opacity(0.6))
+                    )
+
+                // Animated fill
+                TimelineView(.animation) { context in
+                    let t = context.date.timeIntervalSinceReferenceDate
+                    let phase = CGFloat(t.truncatingRemainder(dividingBy: 2.5)) / 2.5
+
+                    Canvas { ctx, size in
+                        let fillRect = CGRect(x: 0, y: 0, width: fillWidth, height: size.height)
+                        ctx.clip(to: Path(roundedRect: CGRect(x: 0, y: 0, width: size.width, height: size.height),
+                                          cornerRadius: 4))
+                        ctx.fill(Path(fillRect), with: .color(color.opacity(0.85)))
+
+                        // Wave overlay
+                        var wave = Path()
+                        let waveHeight: CGFloat = 3
+                        let waveY = size.height * 0.15
+                        wave.move(to: CGPoint(x: 0, y: waveY))
+                        let segments = 40
+                        for i in 0...segments {
+                            let x = fillRect.width * CGFloat(i) / CGFloat(segments)
+                            let angle = (CGFloat(i) / CGFloat(segments) * .pi * 2) + (phase * .pi * 2)
+                            let y = waveY + sin(angle) * waveHeight
+                            wave.addLine(to: CGPoint(x: x, y: y))
+                        }
+                        wave.addLine(to: CGPoint(x: fillRect.width, y: size.height))
+                        wave.addLine(to: CGPoint(x: 0, y: size.height))
+                        wave.closeSubpath()
+                        ctx.fill(wave, with: .color(.white.opacity(0.35)))
+                    }
+                    .frame(width: fillWidth)
+                }
+            }
+        }
+        .frame(height: 14)
+    }
+}
+
+#Preview("LiquidGauge") {
+    VStack(spacing: 16) {
+        LiquidGauge(percentage: 0, color: Color(red: 1.0, green: 0.2, blue: 0.6))
+        LiquidGauge(percentage: 33, color: Color(red: 0.6, green: 0.2, blue: 1.0))
+        LiquidGauge(percentage: 67, color: Color(red: 1.0, green: 0.4, blue: 0.9))
+        LiquidGauge(percentage: 98, color: Color(red: 1.0, green: 0.1, blue: 0.3))
+    }
+    .padding()
+    .frame(width: 280)
+    .background(Color(red: 0.12, green: 0.03, blue: 0.18))
+}
+
 // MARK: - Token Stats Row
 
 struct TokenStatsRow: View {
