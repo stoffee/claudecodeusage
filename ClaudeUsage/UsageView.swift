@@ -911,6 +911,46 @@ struct SegmentedGauge: View {
     .background(Color(red: 0.13, green: 0.13, blue: 0.22))
 }
 
+struct ASCIIGauge: View {
+    let percentage: Int
+    let title: String
+    let barWidth: Int = 18
+
+    private var asciiBar: String {
+        let clamped = max(0, min(percentage, 100))
+        let filled = Int((Double(clamped) / 100.0) * Double(barWidth))
+        let empty = barWidth - filled
+        return String(repeating: "█", count: filled) + String(repeating: "░", count: empty)
+    }
+
+    private var paddedTitle: String {
+        let upper = title.uppercased()
+        if upper.count >= 8 { return String(upper.prefix(8)) }
+        return upper + String(repeating: " ", count: 8 - upper.count)
+    }
+
+    var body: some View {
+        Text("\(paddedTitle) [\(asciiBar)] \(percentage)%")
+            .font(.system(.body, design: .monospaced))
+            .foregroundColor(Color(red: 0.0, green: 1.0, blue: 0.0))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color.black)
+            .cornerRadius(4)
+    }
+}
+
+#Preview("ASCIIGauge") {
+    VStack(spacing: 8) {
+        ASCIIGauge(percentage: 0, title: "Session")
+        ASCIIGauge(percentage: 33, title: "Weekly")
+        ASCIIGauge(percentage: 67, title: "Sonnet")
+        ASCIIGauge(percentage: 98, title: "Opus")
+    }
+    .padding()
+    .frame(width: 280)
+}
+
 // MARK: - Token Stats Row
 
 struct TokenStatsRow: View {
