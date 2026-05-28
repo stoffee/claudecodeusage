@@ -761,18 +761,7 @@ struct UsageRow: View {
             }
 
             // Progress bar
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(theme.barTrack)
-                        .frame(height: 8)
-
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(color)
-                        .frame(width: geometry.size.width * CGFloat(percentage) / 100, height: 8)
-                }
-            }
-            .frame(height: 8)
+            LinearGauge(percentage: percentage, color: color, theme: theme)
 
             // Reset time
             if let resetsAt = resetsAt {
@@ -844,23 +833,47 @@ struct OverageRow: View {
             }
 
             // Progress bar
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(theme.barTrack)
-                        .frame(height: 8)
-
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(color)
-                        .frame(width: geometry.size.width * CGFloat(min(percentage, 100)) / 100, height: 8)
-                }
-            }
-            .frame(height: 8)
+            LinearGauge(percentage: min(percentage, 100), color: color, theme: theme)
         }
         .padding(12)
         .background(theme.cardBackground)
         .cornerRadius(8)
     }
+}
+
+// MARK: - Gauges
+
+struct LinearGauge: View {
+    let percentage: Int
+    let color: Color
+    var theme: AppTheme = .standard
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(theme.barTrack)
+                    .frame(height: 8)
+
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(color)
+                    .frame(width: geometry.size.width * CGFloat(min(percentage, 100)) / 100, height: 8)
+            }
+        }
+        .frame(height: 8)
+    }
+}
+
+#Preview("LinearGauge") {
+    VStack(spacing: 16) {
+        LinearGauge(percentage: 0, color: .green)
+        LinearGauge(percentage: 33, color: .green)
+        LinearGauge(percentage: 67, color: .orange)
+        LinearGauge(percentage: 95, color: .red)
+        LinearGauge(percentage: 120, color: .red)
+    }
+    .padding()
+    .frame(width: 280)
 }
 
 // MARK: - Token Stats Row
