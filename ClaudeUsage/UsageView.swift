@@ -539,6 +539,36 @@ struct UsageView: View {
 
             Divider()
 
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Theme")
+                    .font(.caption)
+                    .foregroundColor(theme.secondaryText)
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
+                    ForEach(AppTheme.allCases, id: \.self) { t in
+                        Button(action: { selectedTheme = t.rawValue }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: t.themeIcon)
+                                Text(t.rawValue)
+                                    .font(.caption)
+                                Spacer()
+                            }
+                            .padding(6)
+                            .background(t.rawValue == selectedTheme ? theme.accent.opacity(0.25) : theme.cardBackground)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .stroke(t.rawValue == selectedTheme ? theme.accent : Color.clear, lineWidth: 1)
+                            )
+                            .cornerRadius(4)
+                            .foregroundColor(theme.primaryText)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+
             HStack {
                 if let lastUpdated = manager.lastUpdated {
                     Text("Updated \(lastUpdated.formatted(.relative(presentation: .named)))")
@@ -565,28 +595,6 @@ struct UsageView: View {
                         .foregroundColor(theme.secondaryText)
                 }
                 .buttonStyle(.borderless)
-
-                // Theme picker
-                Menu {
-                    ForEach(AppTheme.allCases, id: \.self) { t in
-                        Button(action: { selectedTheme = t.rawValue }) {
-                            HStack {
-                                Image(systemName: t.themeIcon)
-                                Text(t.rawValue)
-                                if t.rawValue == selectedTheme {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    Image(systemName: theme.themeIcon)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(theme.accent)
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .frame(width: 24)
 
                 Button(action: {
                     NSApplication.shared.terminate(nil)
