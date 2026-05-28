@@ -27,6 +27,47 @@ enum GaugeStyle: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Icon Pack
+
+enum IconPack: String, CaseIterable, Identifiable {
+    case classic    // 🟢 🟡 🔴
+    case stoffee    // 🚀 🪫 💀
+    case terminal   // [OK] [!] [X]
+    case retro      // ♥ ⚠ ☠
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .classic:  return "Classic"
+        case .stoffee:  return "Stoffee"
+        case .terminal: return "Terminal"
+        case .retro:    return "Retro"
+        }
+    }
+
+    func statusEmoji(for maxUtil: Double) -> String {
+        switch self {
+        case .classic:
+            if maxUtil >= 90 { return "🔴" }
+            if maxUtil >= 70 { return "🟡" }
+            return "🟢"
+        case .stoffee:
+            if maxUtil >= 90 { return "💀" }
+            if maxUtil >= 70 { return "🪫" }
+            return "🚀"
+        case .terminal:
+            if maxUtil >= 90 { return "[X]" }
+            if maxUtil >= 70 { return "[!]" }
+            return "[OK]"
+        case .retro:
+            if maxUtil >= 90 { return "☠" }
+            if maxUtil >= 70 { return "⚠" }
+            return "♥"
+        }
+    }
+}
+
 // MARK: - Theme
 
 enum AppTheme: String, CaseIterable {
