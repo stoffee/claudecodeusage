@@ -228,6 +228,7 @@ struct UsageView: View {
     private var theme: AppTheme { AppTheme(rawValue: selectedTheme) ?? .standard }
     @AppStorage("gaugeStyleOverride") private var gaugeOverride: String = ""
     @AppStorage("iconPackOverride")  private var iconOverride: String = ""
+    @AppStorage("themeSectionExpanded") private var themeExpanded: Bool = false
 
     private var effectiveGauge: GaugeStyle { GaugeStyle(rawValue: gaugeOverride) ?? theme.defaultGauge }
     private var effectiveIconPack: IconPack { IconPack(rawValue: iconOverride) ?? theme.defaultIconPack }
@@ -519,29 +520,43 @@ struct UsageView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Theme")
-                    .font(.caption)
+                Button(action: { withAnimation(.easeInOut(duration: 0.15)) { themeExpanded.toggle() } }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: themeExpanded ? "chevron.down" : "chevron.right")
+                            .font(.caption2)
+                        Text("Theme")
+                            .font(.caption)
+                        Spacer()
+                        Text(theme.rawValue)
+                            .font(.caption2)
+                            .foregroundColor(theme.secondaryText.opacity(0.7))
+                    }
                     .foregroundColor(theme.secondaryText)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
 
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
-                    ForEach(AppTheme.allCases, id: \.self) { t in
-                        Button(action: { selectedTheme = t.rawValue }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: t.themeIcon)
-                                Text(t.rawValue)
-                                    .font(.caption)
-                                Spacer()
+                if themeExpanded {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
+                        ForEach(AppTheme.allCases, id: \.self) { t in
+                            Button(action: { selectedTheme = t.rawValue }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: t.themeIcon)
+                                    Text(t.rawValue)
+                                        .font(.caption)
+                                    Spacer()
+                                }
+                                .padding(6)
+                                .background(t.rawValue == selectedTheme ? theme.accent.opacity(0.25) : theme.cardBackground)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .stroke(t.rawValue == selectedTheme ? theme.accent : Color.clear, lineWidth: 1)
+                                )
+                                .cornerRadius(4)
+                                .foregroundColor(theme.primaryText)
                             }
-                            .padding(6)
-                            .background(t.rawValue == selectedTheme ? theme.accent.opacity(0.25) : theme.cardBackground)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 4)
-                                    .stroke(t.rawValue == selectedTheme ? theme.accent : Color.clear, lineWidth: 1)
-                            )
-                            .cornerRadius(4)
-                            .foregroundColor(theme.primaryText)
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
