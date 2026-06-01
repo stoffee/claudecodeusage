@@ -190,27 +190,6 @@ enum AppTheme: String, CaseIterable {
         }
     }
 
-    func statusEmoji(for maxUtil: Double) -> String {
-        switch self {
-        case .standard:
-            if maxUtil >= 90 { return "🔴" }
-            if maxUtil >= 70 { return "🟡" }
-            return "🟢"
-        case .stoffee:
-            if maxUtil >= 90 { return "💀" }
-            if maxUtil >= 70 { return "🪫" }
-            return "🚀"
-        case .terminal:
-            if maxUtil >= 90 { return "[X]" }
-            if maxUtil >= 70 { return "[!]" }
-            return "[OK]"
-        case .retro:
-            if maxUtil >= 90 { return "☠" }
-            if maxUtil >= 70 { return "⚠" }
-            return "♥"
-        }
-    }
-
     var themeIcon: String {
         switch self {
         case .standard: return "paintbrush"
