@@ -558,61 +558,58 @@ struct UsageView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                }
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Gauge Style")
-                    .font(.caption)
-                    .foregroundColor(theme.secondaryText)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Gauge Style")
+                            .font(.caption2)
+                            .foregroundColor(theme.secondaryText)
 
-                HStack(spacing: 6) {
-                    Picker("", selection: $gaugeOverride) {
-                        Text("Theme default (\(theme.defaultGauge.displayName))").tag("")
-                        ForEach(GaugeStyle.allCases) { g in
-                            Text(g.displayName).tag(g.rawValue)
+                        HStack(spacing: 6) {
+                            Picker("", selection: $gaugeOverride) {
+                                Text("Theme default (\(theme.defaultGauge.displayName))").tag("")
+                                ForEach(GaugeStyle.allCases) { g in
+                                    Text(g.displayName).tag(g.rawValue)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .labelsHidden()
+
+                            if !gaugeOverride.isEmpty {
+                                Button(action: { gaugeOverride = "" }) {
+                                    Image(systemName: "arrow.counterclockwise")
+                                        .foregroundColor(theme.secondaryText)
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Reset to theme default")
+                            }
                         }
                     }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
+                    .padding(.top, 4)
 
-                    if !gaugeOverride.isEmpty {
-                        Button(action: { gaugeOverride = "" }) {
-                            Image(systemName: "arrow.counterclockwise")
-                                .foregroundColor(theme.secondaryText)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Icon Pack")
+                            .font(.caption2)
+                            .foregroundColor(theme.secondaryText)
+
+                        HStack(spacing: 6) {
+                            Picker("", selection: $iconOverride) {
+                                Text("Theme default (\(theme.defaultIconPack.displayName))").tag("")
+                                ForEach(IconPack.allCases) { p in
+                                    Text(p.displayName).tag(p.rawValue)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .labelsHidden()
+
+                            if !iconOverride.isEmpty {
+                                Button(action: { iconOverride = "" }) {
+                                    Image(systemName: "arrow.counterclockwise")
+                                        .foregroundColor(theme.secondaryText)
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Reset to theme default")
+                            }
                         }
-                        .buttonStyle(.borderless)
-                        .help("Reset to theme default")
-                    }
-                }
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Icon Pack")
-                    .font(.caption)
-                    .foregroundColor(theme.secondaryText)
-
-                HStack(spacing: 6) {
-                    Picker("", selection: $iconOverride) {
-                        Text("Theme default (\(theme.defaultIconPack.displayName))").tag("")
-                        ForEach(IconPack.allCases) { p in
-                            Text(p.displayName).tag(p.rawValue)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
-
-                    if !iconOverride.isEmpty {
-                        Button(action: { iconOverride = "" }) {
-                            Image(systemName: "arrow.counterclockwise")
-                                .foregroundColor(theme.secondaryText)
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Reset to theme default")
                     }
                 }
             }
