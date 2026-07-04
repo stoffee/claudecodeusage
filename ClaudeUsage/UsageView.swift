@@ -338,7 +338,19 @@ struct UsageView: View {
                 gaugeStyle: effectiveGauge
             )
 
-            if let sonnetPct = usage.sonnetPercentage {
+            if !usage.modelLimits.isEmpty {
+                ForEach(usage.modelLimits, id: \.displayName) { limit in
+                    UsageRow(
+                        title: "\(limit.displayName) Only",
+                        subtitle: "Model-specific",
+                        percentage: limit.percentage,
+                        resetsAt: limit.resetsAt,
+                        color: theme.colorForPercentage(limit.percentage),
+                        theme: theme,
+                        gaugeStyle: effectiveGauge
+                    )
+                }
+            } else if let sonnetPct = usage.sonnetPercentage {
                 UsageRow(
                     title: "Sonnet Only",
                     subtitle: "Model-specific",
