@@ -388,7 +388,8 @@ struct UsageView: View {
         return sessionManager.sessions.filter { session in
             session.displayTitle.lowercased().contains(query) ||
             session.shortProjectName.lowercased().contains(query) ||
-            (session.branchDisplay?.lowercased().contains(query) ?? false)
+            (session.branchDisplay?.lowercased().contains(query) ?? false) ||
+            session.searchBlob.contains(query)
         }
     }
 
