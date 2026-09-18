@@ -12,9 +12,18 @@ let package = Package(
     ],
     dependencies: [],
     targets: [
+        .target(
+            name: "LanesCore",
+            path: "LanesCore"
+        ),
+        .testTarget(
+            name: "LanesCoreTests",
+            dependencies: ["LanesCore"],
+            path: "LanesCoreTests"
+        ),
         .executableTarget(
             name: "ClaudeUsage",
-            dependencies: [],
+            dependencies: ["LanesCore"],
             path: "ClaudeUsage"
         ),
         .executableTarget(
