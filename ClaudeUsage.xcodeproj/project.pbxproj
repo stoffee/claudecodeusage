@@ -17,6 +17,8 @@
 		004 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 104 /* Assets.xcassets */; };
 		010 /* Roster.swift in Sources */ = {isa = PBXBuildFile; fileRef = 111 /* Roster.swift */; };
 		011 /* WorkItems.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112 /* WorkItems.swift */; };
+		012 /* LaneList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 113 /* LaneList.swift */; };
+		018 /* LaneCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 119 /* LaneCard.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +34,8 @@
 		109 /* UpdateInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateInstaller.swift; sourceTree = "<group>"; };
 		111 /* Roster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Roster.swift; path = LanesCore/Roster.swift; sourceTree = SOURCE_ROOT; };
 		112 /* WorkItems.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WorkItems.swift; path = LanesCore/WorkItems.swift; sourceTree = SOURCE_ROOT; };
+		113 /* LaneList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LaneList.swift; path = LanesCore/LaneList.swift; sourceTree = SOURCE_ROOT; };
+		119 /* LaneCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LaneCard.swift; path = LanesCore/LaneCard.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -65,6 +69,8 @@
 				109 /* UpdateInstaller.swift */,
 				111 /* Roster.swift */,
 				112 /* WorkItems.swift */,
+				113 /* LaneList.swift */,
+				119 /* LaneCard.swift */,
 				104 /* Assets.xcassets */,
 				105 /* ClaudeUsage.entitlements */,
 			);
@@ -157,6 +163,8 @@
 				008 /* UpdateInstaller.swift in Sources */,
 				010 /* Roster.swift in Sources */,
 				011 /* WorkItems.swift in Sources */,
+				012 /* LaneList.swift in Sources */,
+				018 /* LaneCard.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
