@@ -18,6 +18,11 @@ struct ClaudeSession: Identifiable, Equatable {
     let tty: String
     /// User has clicked through to this session since it last asked for attention
     let acknowledged: Bool
+    /// BBS seat this session works in, as recorded by the hook. nil when the
+    /// hook could not tell (LANES-SPEC: show the session, never guess a lane).
+    var lane: String? = nil
+    /// herdr's `HERDR_TAB_ID` for the tab this session runs in, if any.
+    var herdrTabId: String? = nil
 
     var projectName: String {
         cwd.isEmpty ? "Unknown project" : URL(fileURLWithPath: cwd).lastPathComponent
@@ -122,7 +127,9 @@ class SessionMonitor: ObservableObject {
                 updatedAt: updatedAt,
                 termProgram: json["term_program"] as? String ?? "",
                 tty: json["tty"] as? String ?? "",
-                acknowledged: json["acknowledged"] as? Bool ?? false
+                acknowledged: json["acknowledged"] as? Bool ?? false,
+                lane: (json["lane"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+                herdrTabId: (json["herdr_tab_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             ))
         }
 
@@ -242,7 +249,9 @@ class SessionMonitor: ObservableObject {
                 updatedAt: session.updatedAt,
                 termProgram: session.termProgram,
                 tty: session.tty,
-                acknowledged: true
+                acknowledged: true,
+                lane: session.lane,
+                herdrTabId: session.herdrTabId
             )
         }
     }
@@ -454,6 +463,17 @@ class SessionMonitor: ObservableObject {
     CWD=$(get_field cwd)
     MSG=""
 
+    # Lane (LANES-SPEC): RECORDED, never inferred. First hit wins.
+    #  1. $BBS_AGENT, set per tab by `herdr tab create --env`. Authoritative.
+    #  2. <cwd>/.claude/bbs-agent, but ONLY when it names exactly one seat.
+    #  3. Several seats in that file: a hook cannot ask, so no lane.
+    #  4. Nothing: no lane. The session still shows, unlabelled.
+    LANE="${BBS_AGENT:-}"
+    if [ -z "$LANE" ] && [ -n "$CWD" ] && [ -f "$CWD/.claude/bbs-agent" ]; then
+      SEATS=$(sed 's/#.*//' "$CWD/.claude/bbs-agent" | tr -d '[:blank:]' | grep -v '^$' || true)
+      if [ "$(printf '%s\n' "$SEATS" | grep -c . || true)" -eq 1 ]; then LANE=$SEATS; fi
+    fi
+
     [ -n "$SID" ] || exit 0
     FILE="$DIR/$SID.json"
 
@@ -480,8 +500,8 @@ class SessionMonitor: ObservableObject {
       HOPS=$((HOPS+1))
     done
 
-    printf '{"session_id":"%s","status":"%s","cwd":"%s","message":"%s","term_program":"%s","tty":"%s","updated_at":%s}\n' \
-      "$(esc "$SID")" "$STATUS" "$(esc "$CWD")" "$(esc "$MSG")" "$(esc "${TERM_PROGRAM:-}")" "$(esc "$TTY")" "$(date +%s)" > "$FILE"
+    printf '{"session_id":"%s","status":"%s","cwd":"%s","message":"%s","term_program":"%s","tty":"%s","lane":"%s","herdr_tab_id":"%s","updated_at":%s}\n' \
+      "$(esc "$SID")" "$STATUS" "$(esc "$CWD")" "$(esc "$MSG")" "$(esc "${TERM_PROGRAM:-}")" "$(esc "$TTY")" "$(esc "$LANE")" "$(esc "${HERDR_TAB_ID:-}")" "$(date +%s)" > "$FILE"
     exit 0
     """#
 }
