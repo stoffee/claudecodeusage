@@ -88,9 +88,15 @@ public enum ResumeCommand {
     /// like "--print" that could be injected from a corrupted lane-tabs file.
     public static func forNewTab(cwd: String?, sessionId: String?) -> String? {
         guard cwd != nil else { return nil }
-        if let id = sessionId, UUID(uuidString: id)?.uuidString.lowercased() == id {
+        if let id = sessionId, isResumableId(id) {
             return "claude --resume \(id)"
         }
         return "claude"
+    }
+
+    /// True only for a canonical lowercase UUID, the only shape that is safe
+    /// to type into a shell and the shape Claude Code names session files by.
+    public static func isResumableId(_ id: String) -> Bool {
+        UUID(uuidString: id)?.uuidString.lowercased() == id
     }
 }

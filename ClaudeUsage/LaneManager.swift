@@ -38,7 +38,12 @@ final class LaneManager: ObservableObject {
     /// twice and create two tabs that both resume the same session.
     private var opening = Set<String>()
 
+    /// Read at click time: without hooks, no live session can be ruled out,
+    /// so nothing is resumed.
+    private let sessionMonitor: SessionMonitor
+
     init(sessionMonitor: SessionMonitor) {
+        self.sessionMonitor = sessionMonitor
         sessionMonitor.$sessions
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.absorb($0) }
@@ -126,6 +131,8 @@ final class LaneManager: ObservableObject {
         let recorded = store.all()[lane.name]
         let card = cards[lane.name]
         let herdr = self.herdr
+        let hooksInstalled = sessionMonitor.hooksInstalled
+        let sessionsDir = SessionMonitor.sessionsDir
         Task.detached {
             do {
                 let action = TabResolver.resolve(lane: lane.name, recorded: recorded,
@@ -135,27 +142,31 @@ final class LaneManager: ObservableObject {
                     try herdr.focus(tabId: tabId)
 
                 case .create(let candidate):
-                    // A cwd that no longer exists on disk (moved repo, stale card)
-                    // counts as unknown: herdr would fail, and claude must not start
-                    // somewhere we guessed.
-                    var isDir: ObjCBool = false
-                    let cwd = candidate.flatMap {
-                        FileManager.default.fileExists(atPath: $0, isDirectory: &isDir) && isDir.boolValue ? $0 : nil
-                    }
+                    let plan = LaunchPlan.forCreate(
+                        candidate: candidate, recorded: recorded, card: card,
+                        isDirectory: { path in
+                            var isDir: ObjCBool = false
+                            return FileManager.default.fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue
+                        },
+                        sessionFileModified: Self.sessionFileModified,
+                        liveSessionIds: Self.liveSessionIds(in: sessionsDir),
+                        hooksInstalled: hooksInstalled,
+                        now: Date())
                     // No usable path: a plain shell tab in ~, and claude is NOT started.
                     let home = FileManager.default.homeDirectoryForCurrentUser.path
-                    let created = try herdr.create(lane: lane.name, cwd: cwd ?? home)
-                    let sessionId = ResumeCommand.sessionId(forCwd: cwd, recorded: recorded, card: card)
-                    if let cwd {
-                        // Only a real path is recorded. Recording ~ would make it the
-                        // lane's cwd next time and start claude there.
+                    let created = try herdr.create(lane: lane.name, cwd: plan.cwd ?? home)
+                    if let r = plan.record {
+                        // Only a real path is recorded, never the ~ fallback.
                         await MainActor.run {
                             self.store.record(lane: lane.name, RecordedTab(
-                                tabId: created.tabId, cwd: cwd,
-                                sessionId: sessionId, recordedAt: Date()))
+                                tabId: created.tabId, cwd: r.cwd,
+                                sessionId: r.sessionId, recordedAt: Date()))
                         }
                     }
-                    if let command = ResumeCommand.forNewTab(cwd: cwd, sessionId: sessionId) {
+                    if let note = plan.note {
+                        await MainActor.run { self.lastError = note }
+                    }
+                    if let command = plan.command {
                         try herdr.runInShell(paneId: created.paneId, command: command)
                     }
                 }
@@ -164,5 +175,30 @@ final class LaneManager: ObservableObject {
             }
             await MainActor.run { _ = self.opening.remove(lane.name) }
         }
+    }
+
+    /// Modification date of Claude Code's transcript for session `id` in
+    /// `cwd`, nil when there is none.
+    nonisolated private static func sessionFileModified(cwd: String, id: String) -> Date? {
+        let url = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/projects", isDirectory: true)
+            .appendingPathComponent(LaunchPlan.projectDirName(forCwd: cwd), isDirectory: true)
+            .appendingPathComponent("\(id).jsonl")
+        return (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+    }
+
+    /// The session id of every hook sidecar on disk, whatever its age or
+    /// visibility: a sidecar is deleted only on SessionEnd or after 48h, so
+    /// one that exists may still be a running session.
+    nonisolated private static func liveSessionIds(in dir: URL) -> Set<String> {
+        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        var ids = Set<String>()
+        for f in files where f.pathExtension == "json" {
+            guard let data = try? Data(contentsOf: f),
+                  let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let id = obj["session_id"] as? String, !id.isEmpty else { continue }
+            ids.insert(id)
+        }
+        return ids
     }
 }
