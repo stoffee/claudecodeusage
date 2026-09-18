@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(LanesCore)
+import LanesCore
+#endif
 
 /// Read-only client for bbs.stoffee.io. Holds no token and never writes
 /// (LANES-SPEC non-goal: the app reads, /done writes).
@@ -17,13 +20,9 @@ struct BoardClient {
         /// "unexpected response" (a bad URL or failed validation), or the
         /// error's localizedDescription.
         let liveFailure: String?
-    }
-
-    /// `defaults write com.helpfully.ClaudeUsage boardBaseURL http://127.0.0.1:9`
-    /// points the app at a dead port, which is how the cached path is tested.
-    static var baseURL: URL {
-        if let s = UserDefaults.standard.string(forKey: "boardBaseURL"), let u = URL(string: s) { return u }
-        return URL(string: "http://bbs.stoffee.io")!
+        /// nil unless live data came from a candidate other than the first,
+        /// e.g. "bbs.stoffee.io timed out, using agent-bbs.service.consul".
+        let fallbackNote: String?
     }
 
     static let cacheDir = FileManager.default.homeDirectoryForCurrentUser
@@ -39,26 +38,39 @@ struct BoardClient {
     /// `path` is the board path with query; `name` the cache file. Fresh data
     /// is only accepted, and cached, when `validate` passes; otherwise the
     /// previous cache is served, labelled with why the live fetch failed.
+    ///
+    /// Candidates come from `BoardEndpoints.candidates`, tried in order.
+    /// `defaults write com.helpfully.ClaudeUsage boardBaseURL http://127.0.0.1:9`
+    /// points the app at a dead port, which is how the cached path is tested.
     func fetch(_ path: String, cacheAs name: String, validate: (Data) -> Bool) async -> Fetched? {
         let cacheURL = Self.cacheDir.appendingPathComponent(name)
+        let candidates = BoardEndpoints.candidates(override: UserDefaults.standard.string(forKey: "boardBaseURL"))
 
-        let (live, failureReason) = await fetchLive(path, validate: validate)
-        if let live {
-            try? FileManager.default.createDirectory(at: Self.cacheDir, withIntermediateDirectories: true)
-            try? live.write(to: cacheURL, options: .atomic)
-            return Fetched(data: live, at: Date(), fromCache: false, liveFailure: nil)
+        var firstFailure: String?
+        for (index, base) in candidates.enumerated() {
+            let (live, failureReason) = await fetchLive(path, base: base, validate: validate)
+            if let live {
+                try? FileManager.default.createDirectory(at: Self.cacheDir, withIntermediateDirectories: true)
+                try? live.write(to: cacheURL, options: .atomic)
+                var note: String?
+                if index > 0, let firstFailure, let firstHost = candidates.first?.host, let host = base.host {
+                    note = "\(firstHost) \(firstFailure), using \(host)"
+                }
+                return Fetched(data: live, at: Date(), fromCache: false, liveFailure: nil, fallbackNote: note)
+            }
+            if index == 0 { firstFailure = failureReason }
         }
 
         guard let data = try? Data(contentsOf: cacheURL),
               let at = (try? FileManager.default.attributesOfItem(atPath: cacheURL.path))?[.modificationDate] as? Date
         else { return nil }
-        return Fetched(data: data, at: at, fromCache: true, liveFailure: failureReason)
+        return Fetched(data: data, at: at, fromCache: true, liveFailure: firstFailure, fallbackNote: nil)
     }
 
     /// The live half of `fetch`. Returns the body on success, or a short
     /// failure reason on failure.
-    private func fetchLive(_ path: String, validate: (Data) -> Bool) async -> (Data?, String?) {
-        guard let url = URL(string: path, relativeTo: Self.baseURL) else { return (nil, "unexpected response") }
+    private func fetchLive(_ path: String, base: URL, validate: (Data) -> Bool) async -> (Data?, String?) {
+        guard let url = URL(string: path, relativeTo: base) else { return (nil, "unexpected response") }
         do {
             let (data, response) = try await session.data(from: url)
             guard let http = response as? HTTPURLResponse else { return (nil, "unexpected response") }

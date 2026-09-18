@@ -72,7 +72,8 @@ final class LaneManager: ObservableObject {
             return (obj["posts"] as? [Any])?.isEmpty == false
         }
 
-        boardError = [Self.reason(rosterF), Self.reason(workF)].compactMap { $0 }.first
+        let failureReason = [Self.reason(rosterF), Self.reason(workF)].compactMap { $0 }.first
+        boardError = failureReason ?? [rosterF?.fallbackNote, workF?.fallbackNote].compactMap { $0 }.first
 
         guard let rosterF, let seats = try? Roster.parse(rosterF.data) else {
             unavailable = true
