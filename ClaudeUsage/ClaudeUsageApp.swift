@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import UserNotifications
 
 @main
 struct ClaudeUsageApp: App {
@@ -13,15 +14,23 @@ struct ClaudeUsageApp: App {
 }
 
 @MainActor
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    static private(set) var shared: AppDelegate?
+
     var statusItem: NSStatusItem?
     var popover: NSPopover?
+    var settingsWindow: NSWindow?
     var usageManager = UsageManager()
     var sessionManager = SessionManager()
+    var sessionMonitor = SessionMonitor()
+    var statusMonitor = StatusMonitor()
+    var updateInstaller = UpdateInstaller()
     var timer: Timer?
     var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppDelegate.shared = self
+
         // One-shot migration: legacy "System" theme is merged into "Default" (Standard).
         if UserDefaults.standard.string(forKey: "appTheme") == "System" {
             UserDefaults.standard.set("Default", forKey: "appTheme")
@@ -30,11 +39,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Hide dock icon - menubar only
         NSApp.setActivationPolicy(.accessory)
 
+        // Present notification banners even when the app is considered active
+        UNUserNotificationCenter.current().delegate = self
+
         setupStatusItem()
         setupPopover()
         setupWakeNotification()
         setupUsageObserver()
         startFetching()
+        statusMonitor.start()
+
+        // Request notification permission after launch completes (too early fails silently)
+        if sessionMonitor.hooksInstalled {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                self?.sessionMonitor.requestNotificationPermission()
+            }
+        }
     }
 
     func setupWakeNotification() {
@@ -54,6 +74,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
 
         usageManager.$error
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateStatusItem() }
+            .store(in: &cancellables)
+
+        sessionMonitor.$sessions
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateStatusItem() }
             .store(in: &cancellables)
@@ -111,15 +136,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         popover?.contentSize = NSSize(width: 340, height: 480)
         popover?.behavior = .transient
         popover?.contentViewController = NSHostingController(
-            rootView: UsageView(manager: usageManager, sessionManager: sessionManager)
+            rootView: UsageView(
+                manager: usageManager,
+                sessionManager: sessionManager,
+                sessionMonitor: sessionMonitor,
+                statusMonitor: statusMonitor,
+                updateInstaller: updateInstaller
+            )
         )
     }
 
     func updateStatusItem() {
         guard let button = statusItem?.button else { return }
 
+        let attentionCount = sessionMonitor.needsAttentionSessions.count
+        let bell = attentionCount > 0 ? "🔔\(attentionCount) " : ""
+
         if let usage = usageManager.usage {
-            // Overage mode: only when session is maxed (≥90%) AND extra usage is being drawn
+            // Overage mode: only when session is maxed (>=90%) AND extra usage is being drawn
             if usage.extraUsageEnabled,
                let limit = usage.extraUsageMonthlyLimit,
                let used = usage.extraUsageUsedCredits,
@@ -129,21 +163,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 let pink = NSColor(red: 1.0, green: 0.2, blue: 0.6, alpha: 1.0)
                 let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
                 let attrs: [NSAttributedString.Key: Any] = [.foregroundColor: pink, .font: font]
-                button.attributedTitle = NSAttributedString(string: "$$ \(pct)% \(dollars)", attributes: attrs)
+                button.attributedTitle = NSAttributedString(string: "\(bell)$$ \(pct)% \(dollars)", attributes: attrs)
             } else {
                 // Normal mode: themed emoji + countdown timer
                 button.attributedTitle = NSAttributedString(string: "")
                 let sessionPct = usage.sessionPercentage
                 let emoji = usageManager.statusEmoji
                 let countdown = formatResetTime(usage.sessionResetsAt)
-                button.title = "\(emoji) \(sessionPct)%\(countdown)"
+                button.title = "\(bell)\(emoji) \(sessionPct)%\(countdown)"
             }
         } else if usageManager.error != nil {
             button.attributedTitle = NSAttributedString(string: "")
-            button.title = "\u{274C}"
+            button.title = "\(bell)\u{274C}"
         } else {
             button.attributedTitle = NSAttributedString(string: "")
-            button.title = "\u{23F3}"
+            button.title = "\(bell)\u{23F3}"
         }
     }
 
@@ -159,6 +193,53 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return " \(hours)h"
         } else {
             return " \(max(minutes, 1))m"
+        }
+    }
+
+    func openSettingsWindow() {
+        popover?.performClose(nil)
+
+        if settingsWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 520, height: 520),
+                styleMask: [.titled, .closable, .miniaturizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "ClaudeUsage Settings"
+            window.contentViewController = NSHostingController(rootView: ClaudeSettingsView(sessionMonitor: sessionMonitor, statusMonitor: statusMonitor))
+            window.isReleasedWhenClosed = false
+            window.center()
+            settingsWindow = window
+        }
+
+        settingsWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        let sessionId = userInfo["session_id"] as? String
+        let statusURL = userInfo["status_url"] as? String
+        Task { @MainActor in
+            if let sessionId {
+                self.sessionMonitor.focusSession(id: sessionId)
+            } else if let statusURL, let url = URL(string: statusURL) {
+                NSWorkspace.shared.open(url)
+            }
+            completionHandler()
         }
     }
 

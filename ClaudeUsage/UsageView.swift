@@ -221,6 +221,9 @@ enum AppTheme: String, CaseIterable {
 struct UsageView: View {
     @ObservedObject var manager: UsageManager
     @ObservedObject var sessionManager: SessionManager
+    @ObservedObject var sessionMonitor: SessionMonitor
+    @ObservedObject var statusMonitor: StatusMonitor
+    @ObservedObject var updateInstaller: UpdateInstaller
     @Environment(\.openURL) var openURL
     @State private var selectedTab: AppTab = .usage
     @State private var sessionSearchText: String = ""
@@ -261,6 +264,11 @@ struct UsageView: View {
             .padding()
             .background(theme.headerBackground)
 
+            // Update available banner
+            if let newVersion = manager.updateAvailable {
+                updateBanner(newVersion)
+            }
+
             // Tab picker — custom so Stoffee theme colors apply
             HStack(spacing: 0) {
                 ForEach(AppTab.allCases, id: \.self) { tab in
@@ -295,6 +303,11 @@ struct UsageView: View {
 
             Divider()
 
+            // Claude service status (from status.claude.com)
+            statusRow()
+
+            Divider()
+
             // Footer
             footerView()
         }
@@ -306,6 +319,12 @@ struct UsageView: View {
 
     @ViewBuilder
     func usageTabContent() -> some View {
+        // Live Claude Code sessions (when alert hooks are installed)
+        if sessionMonitor.hooksInstalled && !sessionMonitor.sessions.isEmpty {
+            sessionsSection()
+            Divider()
+        }
+
         if let error = manager.error {
             errorView(error)
         } else if let usage = manager.usage {
@@ -451,6 +470,71 @@ struct UsageView: View {
     // MARK: - Error / Loading
 
     @ViewBuilder
+    func sessionsSection() -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("CLAUDE SESSIONS")
+                .font(.caption2)
+                .fontWeight(.semibold)
+                .foregroundColor(.secondary)
+
+            ForEach(sessionMonitor.sessions) { session in
+                Button(action: {
+                    AppDelegate.shared?.popover?.performClose(nil)
+                    sessionMonitor.focusSession(session)
+                }) {
+                    HStack(spacing: 8) {
+                        Text(sessionIcon(session))
+                            .font(.caption)
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(session.projectName)
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .lineLimit(1)
+                            Text(sessionLabel(session))
+                                .font(.caption2)
+                                .foregroundColor(session.status == .needsAttention && !session.acknowledged ? .orange : .secondary)
+                                .lineLimit(1)
+                        }
+
+                        Spacer()
+
+                        Text(session.updatedAt.formatted(.relative(presentation: .named)))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 2)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Jump to this session's terminal window")
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+
+    func sessionIcon(_ session: ClaudeSession) -> String {
+        switch session.status {
+        case .needsAttention: return session.acknowledged ? "🔕" : "🔔"
+        case .running: return "⚙️"
+        case .finished: return "✅"
+        }
+    }
+
+    func sessionLabel(_ session: ClaudeSession) -> String {
+        switch session.status {
+        case .needsAttention:
+            if session.acknowledged { return "Waiting (seen)" }
+            return session.message.isEmpty ? "Needs your input" : session.message
+        case .running:
+            return "Working…"
+        case .finished:
+            return "Finished"
+        }
+    }
+
+    @ViewBuilder
     func errorView(_ error: String) -> some View {
         VStack(spacing: 12) {
             if error.contains("Not logged in") {
@@ -510,6 +594,101 @@ struct UsageView: View {
     }
 
     // MARK: - Footer
+
+    @ViewBuilder
+    func updateBanner(_ newVersion: String) -> some View {
+        VStack(spacing: 4) {
+            switch updateInstaller.state {
+            case .idle:
+                if let downloadURL = manager.updateDownloadURL {
+                    Button(action: {
+                        Task { await updateInstaller.installUpdate(from: downloadURL) }
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.down.circle.fill")
+                            Text("Update to v\(newVersion) & Relaunch")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
+                } else {
+                    // No zip asset found — fall back to manual download
+                    Button(action: {
+                        openURL(URL(string: "https://github.com/richhickson/claudecodeusage/releases/latest")!)
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.down.circle.fill")
+                            Text("Update Available: v\(newVersion)")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
+                }
+            case .downloading:
+                HStack(spacing: 8) {
+                    ProgressView().scaleEffect(0.6)
+                    Text("Downloading v\(newVersion)…").font(.caption)
+                }
+            case .installing:
+                HStack(spacing: 8) {
+                    ProgressView().scaleEffect(0.6)
+                    Text("Verifying & installing…").font(.caption)
+                }
+            case .relaunching:
+                Text("Relaunching…").font(.caption)
+            case .failed(let message):
+                Text("Update failed: \(message)")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Download manually") {
+                    openURL(URL(string: "https://github.com/richhickson/claudecodeusage/releases/latest")!)
+                }
+                .font(.caption)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    func statusRow() -> some View {
+        if let indicator = statusMonitor.indicator {
+            Button(action: {
+                openURL(URL(string: StatusMonitor.statusPageURL)!)
+            }) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(statusColor(indicator))
+                        .frame(width: 8, height: 8)
+                    Text(statusMonitor.statusDescription.isEmpty ? "Claude status" : statusMonitor.statusDescription)
+                        .font(.caption)
+                        .foregroundColor(indicator == "none" ? .secondary : .primary)
+                        .lineLimit(1)
+                    Spacer()
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(statusMonitor.incidentName.isEmpty ? "Open status.claude.com" : statusMonitor.incidentName)
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+        }
+    }
+
+    func statusColor(_ indicator: String) -> Color {
+        switch indicator {
+        case "none": return .green
+        case "minor": return .yellow
+        case "major": return .orange
+        default: return .red // critical
+        }
+    }
 
     @ViewBuilder
     func footerView() -> some View {
@@ -655,6 +834,14 @@ struct UsageView: View {
                         .foregroundColor(theme.secondaryText)
                 }
                 .buttonStyle(.borderless)
+
+                Button(action: {
+                    AppDelegate.shared?.openSettingsWindow()
+                }) {
+                    Image(systemName: "gearshape")
+                }
+                .buttonStyle(.borderless)
+                .help("Claude Code settings (CLAUDE.md, retention)")
 
                 Button(action: {
                     NSApplication.shared.terminate(nil)
@@ -1187,5 +1374,11 @@ struct TokenStatsRow: View {
 }
 
 #Preview {
-    UsageView(manager: UsageManager(), sessionManager: SessionManager())
+    UsageView(
+        manager: UsageManager(),
+        sessionManager: SessionManager(),
+        sessionMonitor: SessionMonitor(),
+        statusMonitor: StatusMonitor(),
+        updateInstaller: UpdateInstaller()
+    )
 }
