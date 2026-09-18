@@ -445,6 +445,13 @@ struct UsageView: View {
                 }
             }
 
+            if !laneManager.openCountsKnown {
+                // Spec D4: an unreadable work thread must not read as "0 open".
+                Text("open counts unavailable")
+                    .font(.caption2)
+                    .foregroundColor(.orange)
+            }
+
             if laneManager.unavailable {
                 Text("Board unreachable and no cached lane data")
                     .font(.caption)
@@ -453,11 +460,18 @@ struct UsageView: View {
                 ScrollView {
                     VStack(spacing: 2) {
                         ForEach(laneManager.lanes) { lane in
-                            LaneRow(lane: lane, theme: theme) { }
+                            LaneRow(lane: lane, theme: theme, countsKnown: laneManager.openCountsKnown) { }
                         }
                     }
                 }
                 .frame(maxHeight: 200)
+            }
+
+            if let err = laneManager.boardError {
+                Text(err)
+                    .font(.caption2)
+                    .foregroundColor(theme.secondaryText)
+                    .lineLimit(2)
             }
 
             if let err = laneManager.lastError {
@@ -1194,6 +1208,9 @@ struct LiquidGauge: View {
 struct LaneRow: View {
     let lane: Lane
     var theme: AppTheme = .standard
+    /// False when the board's work thread could not be loaded this refresh.
+    /// The count is then unknown, never rendered as "0 open" (spec D4).
+    var countsKnown: Bool = true
     let onTap: () -> Void
 
     var body: some View {
@@ -1215,10 +1232,17 @@ struct LaneRow: View {
                     .foregroundColor(theme.secondaryText)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text("\(lane.openItems) open")
-                    .font(.caption2)
-                    .monospacedDigit()
-                    .foregroundColor(lane.openItems > 0 ? theme.accent : theme.secondaryText)
+                if countsKnown {
+                    Text("\(lane.openItems) open")
+                        .font(.caption2)
+                        .monospacedDigit()
+                        .foregroundColor(lane.openItems > 0 ? theme.accent : theme.secondaryText)
+                } else {
+                    Text("? open")
+                        .font(.caption2)
+                        .monospacedDigit()
+                        .foregroundColor(theme.secondaryText)
+                }
             }
             .padding(.vertical, 3)
             .contentShape(Rectangle())

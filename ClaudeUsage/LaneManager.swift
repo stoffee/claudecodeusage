@@ -13,6 +13,13 @@ final class LaneManager: ObservableObject {
     @Published private(set) var cachedAt: Date?
     /// Board unreachable AND nothing cached.
     @Published private(set) var unavailable = false
+    /// False when the work thread could not be loaded, live or cached, this
+    /// refresh. `openCounts` is then empty, and every lane's count must read
+    /// as unknown rather than "0 open" as if that were live data (spec D4).
+    @Published private(set) var openCountsKnown = true
+    /// Reason the most recent refresh served cached or missing data, for
+    /// either half of the board. nil when both halves were live.
+    @Published private(set) var boardError: String?
     @Published var lastError: String?
 
     let store = LaneTabStore(url: FileManager.default.homeDirectoryForCurrentUser
@@ -50,8 +57,18 @@ final class LaneManager: ObservableObject {
         if !force, let last = lastFetch, Date().timeIntervalSince(last) < 60 { return }
         lastFetch = Date()
 
-        let rosterF = await board.fetch("agents?json=1", cacheAs: "agents.json") { (try? Roster.parse($0)) != nil }
-        let workF = await board.fetch("t/work?json=1", cacheAs: "work.json") { (try? WorkItems.openCounts($0)) != nil }
+        // An empty but well-formed response is not good data: the 2026-09-14
+        // outage was a 200 with an empty database, and it must not overwrite
+        // a good cache (spec D4).
+        let rosterF = await board.fetch("agents?json=1", cacheAs: "agents.json") {
+            (try? Roster.parse($0))?.isEmpty == false
+        }
+        let workF = await board.fetch("t/work?json=1", cacheAs: "work.json") { data in
+            guard let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return false }
+            return (obj["posts"] as? [Any])?.isEmpty == false
+        }
+
+        boardError = [Self.reason(rosterF), Self.reason(workF)].compactMap { $0 }.first
 
         guard let rosterF, let seats = try? Roster.parse(rosterF.data) else {
             unavailable = true
@@ -59,11 +76,19 @@ final class LaneManager: ObservableObject {
         }
         unavailable = false
         roster = seats
+        openCountsKnown = workF != nil
         openCounts = workF.flatMap { try? WorkItems.openCounts($0.data) } ?? [:]
         cards = Self.loadCards()
         // If either half is stale the list is; report the older timestamp.
         cachedAt = [rosterF, workF].compactMap { $0 }.filter(\.fromCache).map(\.at).min()
         rebuild()
+    }
+
+    /// "board unreachable" when the fetch produced nothing at all (no live
+    /// data, no cache); otherwise the fetch's own reason, nil when live.
+    private static func reason(_ f: BoardClient.Fetched?) -> String? {
+        guard let f else { return "board unreachable" }
+        return f.liveFailure
     }
 
     private func rebuild() {

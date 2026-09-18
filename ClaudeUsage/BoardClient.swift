@@ -12,6 +12,11 @@ struct BoardClient {
         let data: Data
         let at: Date
         let fromCache: Bool
+        /// nil for live data. Set when this is served from cache, to a short
+        /// reason the live fetch failed: "timed out", "HTTP <code>",
+        /// "unexpected response" (a bad URL or failed validation), or the
+        /// error's localizedDescription.
+        let liveFailure: String?
     }
 
     /// `defaults write com.helpfully.ClaudeUsage boardBaseURL http://127.0.0.1:9`
@@ -33,22 +38,36 @@ struct BoardClient {
 
     /// `path` is the board path with query; `name` the cache file. Fresh data
     /// is only accepted, and cached, when `validate` passes; otherwise the
-    /// previous cache is served.
+    /// previous cache is served, labelled with why the live fetch failed.
     func fetch(_ path: String, cacheAs name: String, validate: (Data) -> Bool) async -> Fetched? {
         let cacheURL = Self.cacheDir.appendingPathComponent(name)
 
-        if let url = URL(string: path, relativeTo: Self.baseURL),
-           let result = try? await session.data(from: url),
-           (result.1 as? HTTPURLResponse)?.statusCode == 200,
-           validate(result.0) {
+        let (live, failureReason) = await fetchLive(path, validate: validate)
+        if let live {
             try? FileManager.default.createDirectory(at: Self.cacheDir, withIntermediateDirectories: true)
-            try? result.0.write(to: cacheURL, options: .atomic)
-            return Fetched(data: result.0, at: Date(), fromCache: false)
+            try? live.write(to: cacheURL, options: .atomic)
+            return Fetched(data: live, at: Date(), fromCache: false, liveFailure: nil)
         }
 
         guard let data = try? Data(contentsOf: cacheURL),
               let at = (try? FileManager.default.attributesOfItem(atPath: cacheURL.path))?[.modificationDate] as? Date
         else { return nil }
-        return Fetched(data: data, at: at, fromCache: true)
+        return Fetched(data: data, at: at, fromCache: true, liveFailure: failureReason)
+    }
+
+    /// The live half of `fetch`. Returns the body on success, or a short
+    /// failure reason on failure.
+    private func fetchLive(_ path: String, validate: (Data) -> Bool) async -> (Data?, String?) {
+        guard let url = URL(string: path, relativeTo: Self.baseURL) else { return (nil, "unexpected response") }
+        do {
+            let (data, response) = try await session.data(from: url)
+            guard let http = response as? HTTPURLResponse else { return (nil, "unexpected response") }
+            guard http.statusCode == 200 else { return (nil, "HTTP \(http.statusCode)") }
+            guard validate(data) else { return (nil, "unexpected response") }
+            return (data, nil)
+        } catch {
+            if (error as? URLError)?.code == .timedOut { return (nil, "timed out") }
+            return (nil, error.localizedDescription)
+        }
     }
 }
