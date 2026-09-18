@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Lane to last recorded herdr tab, persisted to disk.
 ///
@@ -8,6 +9,7 @@ import Foundation
 ///
 /// Not thread safe. The app only touches it from the main actor.
 public final class LaneTabStore {
+    private static let logger = Logger(subsystem: "com.helpfully.ClaudeUsage", category: "lanes")
     private let url: URL
     private var map: [String: RecordedTab]
 
@@ -29,9 +31,27 @@ public final class LaneTabStore {
         let enc = JSONEncoder()
         enc.dateEncodingStrategy = .secondsSince1970
         enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? enc.encode(map) else { return }
-        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
-                                                 withIntermediateDirectories: true)
-        try? data.write(to: url, options: .atomic)
+
+        let data: Data
+        do {
+            data = try enc.encode(map)
+        } catch {
+            Self.logger.error("lane-tabs write failed: \(error.localizedDescription)")
+            return
+        }
+
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                     withIntermediateDirectories: true)
+        } catch {
+            Self.logger.error("lane-tabs write failed: \(error.localizedDescription)")
+            return
+        }
+
+        do {
+            try data.write(to: url, options: .atomic)
+        } catch {
+            Self.logger.error("lane-tabs write failed: \(error.localizedDescription)")
+        }
     }
 }

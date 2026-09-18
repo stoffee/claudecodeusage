@@ -65,15 +65,8 @@ public enum TabResolver {
 }
 
 public enum ResumeCommand {
-    /// What to type into a freshly created tab.
-    ///
-    /// - nil when the cwd is unknown: never start claude in a guessed directory.
-    /// - `claude --resume <id>` when a session was recorded for the lane.
-    /// - `claude` otherwise.
-    ///
-    /// The id is typed into a shell, so anything outside ASCII [A-Za-z0-9-]
-    /// falls back to plain `claude` rather than risk the shell reading it.
     /// Which recorded session a new tab in `cwd` should resume, if any.
+    ///
     /// The hook's record wins (it carries its own cwd, which is how `cwd` was
     /// chosen). A lane card's id is used only when `cwd` is the card's own
     /// cwd: `claude --resume` looks sessions up per directory, so an id from
@@ -84,10 +77,18 @@ public enum ResumeCommand {
         return nil
     }
 
+    /// What to type into a freshly created tab.
+    ///
+    /// - nil when the cwd is unknown: never start claude in a guessed directory.
+    /// - `claude --resume <id>` when a session was recorded for the lane.
+    /// - `claude` otherwise.
+    ///
+    /// The id is typed into a shell, so only canonical lowercase UUIDs are
+    /// accepted, which rules out shell metacharacters and flag-shaped values
+    /// like "--print" that could be injected from a corrupted lane-tabs file.
     public static func forNewTab(cwd: String?, sessionId: String?) -> String? {
         guard cwd != nil else { return nil }
-        if let id = sessionId, !id.isEmpty,
-           id.unicodeScalars.allSatisfy({ $0.isASCII && (CharacterSet.alphanumerics.contains($0) || $0 == "-") }) {
+        if let id = sessionId, UUID(uuidString: id)?.uuidString.lowercased() == id {
             return "claude --resume \(id)"
         }
         return "claude"

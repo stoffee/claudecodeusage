@@ -104,6 +104,16 @@ final class TabResolverTests: XCTestCase {
         XCTAssertEqual(ResumeCommand.forNewTab(cwd: "/r", sessionId: "abcé"), "claude")
     }
 
+    /// A flag-shaped id must never reach the command line.
+    func testFlagShapedSessionIdIsRefused() {
+        XCTAssertEqual(ResumeCommand.forNewTab(cwd: "/r", sessionId: "--print"), "claude")
+    }
+
+    /// Session files are named by lowercase UUID; anything else is not a real id.
+    func testNonCanonicalUuidIsRefused() {
+        XCTAssertEqual(ResumeCommand.forNewTab(cwd: "/r", sessionId: "6D82EAD5-2B7B-40E6-AA09-E90650247044"), "claude")
+    }
+
     func testRecordedSessionWins() {
         let card = LaneCard(lane: "x", cwd: "/r", lastSessionId: "card-id")
         XCTAssertEqual(ResumeCommand.sessionId(forCwd: "/r", recorded: rec("t", "/r", "rec-id"), card: card), "rec-id")
