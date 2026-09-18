@@ -298,6 +298,16 @@ struct UsageView: View {
         }
     }
 
+    /// "4.2M / ~10.0M tokens (est., this Mac)" under the weekly gauge — nil
+    /// whenever the estimate would be untrustworthy or the local scan found
+    /// nothing. See `UsageData.impliedWeeklyBudget`.
+    func weeklyTokenFootnote(_ usage: UsageData) -> String? {
+        guard let stats = manager.tokenStats,
+              let budget = usage.impliedWeeklyBudget(windowTokens: stats.windowTokens)
+        else { return nil }
+        return "\(formatTokenCount(stats.windowTokens)) / ~\(formatTokenCount(budget)) tokens (est., this Mac)"
+    }
+
     @ViewBuilder
     func usageContent(_ usage: UsageData) -> some View {
         VStack(spacing: 16) {
@@ -318,7 +328,8 @@ struct UsageView: View {
                 resetsAt: usage.weeklyResetsAt,
                 color: theme.colorForPercentage(usage.weeklyPercentage),
                 theme: theme,
-                gaugeStyle: effectiveGauge
+                gaugeStyle: effectiveGauge,
+                footnote: weeklyTokenFootnote(usage)
             )
 
             if !usage.modelLimits.isEmpty {
@@ -818,6 +829,7 @@ struct UsageRow: View {
     let color: Color
     var theme: AppTheme = .standard
     var gaugeStyle: GaugeStyle = .linear
+    var footnote: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -863,6 +875,12 @@ struct UsageRow: View {
                         .font(.caption)
                 }
                 .foregroundColor(theme.secondaryText)
+            }
+
+            if let footnote = footnote {
+                Text(footnote)
+                    .font(.caption2)
+                    .foregroundColor(theme.secondaryText)
             }
         }
         .padding(12)
@@ -1123,6 +1141,12 @@ struct LiquidGauge: View {
 
 // MARK: - Token Stats Row
 
+func formatTokenCount(_ n: Int) -> String {
+    if n >= 1_000_000 { return String(format: "%.1fM", Double(n) / 1_000_000) }
+    if n >= 1_000     { return String(format: "%.1fk", Double(n) / 1_000) }
+    return "\(n)"
+}
+
 struct TokenStatsRow: View {
     let stats: TokenStats
     var theme: AppTheme = .standard
@@ -1181,11 +1205,7 @@ struct TokenStatsRow: View {
         .frame(maxWidth: .infinity)
     }
 
-    func formatTokens(_ n: Int) -> String {
-        if n >= 1_000_000 { return String(format: "%.1fM", Double(n) / 1_000_000) }
-        if n >= 1_000     { return String(format: "%.1fk", Double(n) / 1_000) }
-        return "\(n)"
-    }
+    func formatTokens(_ n: Int) -> String { formatTokenCount(n) }
 }
 
 #Preview {

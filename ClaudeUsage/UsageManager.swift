@@ -25,6 +25,20 @@ struct UsageData {
     var sessionPercentage: Int { Int(sessionUtilization) }
     var weeklyPercentage: Int { Int(weeklyUtilization) }
     var sonnetPercentage: Int? { sonnetUtilization.map { Int($0) } }
+    /// Rough estimate of the plan's weekly token allowance, implied by dividing
+    /// locally-counted tokens by the API's reported weekly utilization.
+    ///
+    /// Deliberately nil below 5% utilization: at 1-2% the divisor is so small
+    /// that rounding in the reported percentage swings the estimate wildly.
+    ///
+    /// This is an ESTIMATE and reads low if Claude Code also runs on another
+    /// machine: local JSONL only sees this Mac, and it counts raw tokens while
+    /// the API weights them by model cost.
+    func impliedWeeklyBudget(windowTokens: Int) -> Int? {
+        guard weeklyUtilization >= 5, windowTokens > 0 else { return nil }
+        return Int(Double(windowTokens) / (weeklyUtilization / 100))
+    }
+
     var extraUsagePercentage: Int? {
         guard extraUsageEnabled, let limit = extraUsageMonthlyLimit, let used = extraUsageUsedCredits, limit > 0 else { return nil }
         return Int((used / limit) * 100)
@@ -34,6 +48,12 @@ struct UsageData {
 struct TokenStats {
     let todayTokens: Int
     let weekTokens: Int
+    /// Tokens inside the API's rolling seven-day window (its `resets_at` minus
+    /// 7 days, up to now), summed from exact message timestamps. `weekTokens` is
+    /// a Sun-Sat calendar week and does NOT line up with that window unless the
+    /// limit happens to reset on a Sunday; bucketing this by day instead
+    /// overcounted by 19.5% when measured against a 02:00 UTC reset.
+    let windowTokens: Int
     let mostActiveDay: String      // e.g. "Apr 8"
     let mostActiveDayTokens: Int
     let currentStreak: Int         // consecutive active days up to today
@@ -120,11 +140,10 @@ class UsageManager: ObservableObject {
             do {
                 async let usageData = fetchUsage(token: token)
                 async let profileEmail = fetchProfileEmail(token: token)
-                async let tStats = fetchTokenStats()
-                let (data, email, ts) = try await (usageData, profileEmail, tStats)
+                let (data, email) = try await (usageData, profileEmail)
                 usage = data
                 claudeUsername = email
-                tokenStats = ts
+                tokenStats = await fetchTokenStats(weeklyResetsAt: data.weeklyResetsAt)
                 lastUpdated = Date()
             } catch UsageError.apiError(statusCode: 401) {
                 // Token might be stale even if not past expiresAt - force refresh
@@ -133,11 +152,10 @@ class UsageManager: ObservableObject {
                     token = try await refreshAccessToken(credentials: creds)
                     async let usageData = fetchUsage(token: token)
                     async let profileEmail = fetchProfileEmail(token: token)
-                    async let tStats = fetchTokenStats()
-                    let (data, email, ts) = try await (usageData, profileEmail, tStats)
+                    let (data, email) = try await (usageData, profileEmail)
                     usage = data
                     claudeUsername = email
-                    tokenStats = ts
+                    tokenStats = await fetchTokenStats(weeklyResetsAt: data.weeklyResetsAt)
                     lastUpdated = Date()
                 } else {
                     throw UsageError.apiError(statusCode: 401)
@@ -175,10 +193,13 @@ class UsageManager: ObservableObject {
     private static let oauthClientId = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
     private static let oauthTokenURL = "https://platform.claude.com/v1/oauth/token"
 
-    func fetchTokenStats() async -> TokenStats? {
+    func fetchTokenStats(weeklyResetsAt: Date? = nil) async -> TokenStats? {
         await Task.detached(priority: .utility) {
             var dailyTotals: [String: Int] = [:]
             var activeDays: Set<String> = []
+            // Start of the API's rolling seven-day window, if we were given one.
+            let windowStart = weeklyResetsAt.map { $0.addingTimeInterval(-7 * 24 * 3600) }
+            var windowTokens = 0
 
             let home = FileManager.default.homeDirectoryForCurrentUser
             let cacheURL = home.appendingPathComponent(".claude/stats-cache.json")
@@ -222,7 +243,12 @@ class UsageManager: ObservableObject {
                     guard url.pathExtension == "jsonl" else { continue }
                     if let lastCached = lastCachedDate,
                        let modDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate {
-                        if ymd.string(from: modDate) <= lastCached { continue }
+                        // The cache covers this file, but a stale cache must not
+                        // hide entries inside the rolling window — windowTokens is
+                        // summed from exact timestamps and has no cache to fall
+                        // back on.
+                        let couldHoldWindowEntries = windowStart.map { modDate >= $0 } ?? false
+                        if ymd.string(from: modDate) <= lastCached && !couldHoldWindowEntries { continue }
                     }
                     guard let content = try? String(contentsOf: url, encoding: .utf8) else { continue }
                     for line in content.split(separator: "\n", omittingEmptySubsequences: true) {
@@ -238,6 +264,9 @@ class UsageManager: ObservableObject {
                                        + (usage["cache_creation_input_tokens"] as? Int ?? 0)
                                        + (usage["output_tokens"] as? Int ?? 0)
                             dailyTotals[day, default: 0] += tokens
+                            if let windowStart = windowStart, ts >= windowStart {
+                                windowTokens += tokens
+                            }
                         }
                     }
                 }
@@ -278,6 +307,7 @@ class UsageManager: ObservableObject {
             }
 
             return TokenStats(todayTokens: todayTokens, weekTokens: weekTokens,
+                              windowTokens: windowTokens,
                               mostActiveDay: bestLabel, mostActiveDayTokens: best.value,
                               currentStreak: streak)
         }.value
