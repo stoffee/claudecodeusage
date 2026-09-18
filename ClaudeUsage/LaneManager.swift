@@ -109,8 +109,8 @@ final class LaneManager: ObservableObject {
                                  liveLanes: liveLanes)
     }
 
-    /// `~/.claude/lanes/*.json`. Small files and few of them; unreadable or
-    /// non-v1 cards are skipped. The filename is not trusted for the lane
+    /// `~/.claude/lanes/*.json`. Small files and few of them; unreadable cards,
+    /// and versions LaneCard does not know, are skipped. The filename is not trusted for the lane
     /// name, the card's own `lane` field is.
     private static func loadCards() -> [String: LaneCard] {
         let dir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/lanes")

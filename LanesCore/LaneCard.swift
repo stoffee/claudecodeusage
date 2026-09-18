@@ -1,7 +1,8 @@
 import Foundation
 
 /// A lane card from `~/.claude/lanes/<lane>.json`, written by the /resume
-/// tooling in claude-config (contract: `written_by == "lane-card-v1"`).
+/// tooling in claude-config (contract: `written_by` is "lane-card-v1" or
+/// "lane-card-v2"; v2 added `last_session_id`).
 ///
 /// It is a CACHE and may be missing at any time. A missing card means "no
 /// card", never "this lane has no history".
@@ -19,16 +20,19 @@ public struct LaneCard: Equatable, Sendable {
         self.lastSessionId = lastSessionId
     }
 
-    /// nil for anything that is not a lane-card-v1, so a future format change
-    /// is ignored rather than misread.
+    /// nil for anything that is not a v1 or v2 card, so a future format
+    /// change is ignored rather than misread.
     public static func parse(_ data: Data) -> LaneCard? {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              obj["written_by"] as? String == "lane-card-v1",
+              let version = obj["written_by"] as? String,
+              version == "lane-card-v1" || version == "lane-card-v2",
               let lane = obj["lane"] as? String, !lane.isEmpty else { return nil }
         func nonEmpty(_ key: String) -> String? {
             guard let v = obj[key] as? String, !v.isEmpty else { return nil }
             return v
         }
-        return LaneCard(lane: lane, cwd: nonEmpty("cwd"), lastSessionId: nonEmpty("last_session_id"))
+        // v1 has no last_session_id; only v2 is trusted to carry one.
+        let sessionId = version == "lane-card-v2" ? nonEmpty("last_session_id") : nil
+        return LaneCard(lane: lane, cwd: nonEmpty("cwd"), lastSessionId: sessionId)
     }
 }
