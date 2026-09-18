@@ -124,6 +124,22 @@ final class LaunchPlanTests: XCTestCase {
         XCTAssertEqual(p.command, "claude")
     }
 
+    /// The lane reaches the typed command on both the refused and resumed paths.
+    func testLaneIsThreadedIntoTheCommand() {
+        let refused = LaunchPlan.forCreate(candidate: agentBbs, recorded: nil,
+                                           card: LaneCard(lane: "sysop", cwd: agentBbs, lastSessionId: id),
+                                           isDirectory: { $0 == self.agentBbs },
+                                           sessionFileModified: files(["-Users-stoffee-git-agent-bbs/\(id)": old]),
+                                           liveSessionIds: [], hooksInstalled: false, now: now, lane: "sysop")
+        XCTAssertEqual(refused.command, "claude -n sysop \"/resume sysop\"")
+        let resumed = LaunchPlan.forCreate(candidate: agentBbs, recorded: nil,
+                                           card: LaneCard(lane: "sysop", cwd: agentBbs, lastSessionId: id),
+                                           isDirectory: { $0 == self.agentBbs },
+                                           sessionFileModified: files(["-Users-stoffee-git-agent-bbs/\(id)": old]),
+                                           liveSessionIds: [], hooksInstalled: true, now: now, lane: "sysop")
+        XCTAssertEqual(resumed.command, "claude -n sysop --resume \(id)")
+    }
+
     func testRecordedSessionIsResumedInRecordedCwd() {
         let rid = "6d82ead5-2b7b-40e6-aa09-e90650247044"
         let rec = RecordedTab(tabId: "w1:t3", cwd: "/r", sessionId: rid, recordedAt: now)

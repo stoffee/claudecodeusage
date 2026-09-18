@@ -114,6 +114,25 @@ final class TabResolverTests: XCTestCase {
         XCTAssertEqual(ResumeCommand.forNewTab(cwd: "/r", sessionId: "6D82EAD5-2B7B-40E6-AA09-E90650247044"), "claude")
     }
 
+    /// A fresh session is named after its lane and loads it with /resume.
+    func testLaneNamesAndLoadsAFreshSession() {
+        XCTAssertEqual(ResumeCommand.forNewTab(cwd: "/r", sessionId: nil, lane: "camera-detection"),
+                       "claude -n camera-detection \"/resume camera-detection\"")
+    }
+
+    /// A resumed session is named after its lane too.
+    func testLaneNamesAResumedSession() {
+        XCTAssertEqual(ResumeCommand.forNewTab(cwd: "/r", sessionId: "6d82ead5-2b7b-40e6-aa09-e90650247044", lane: "sysop"),
+                       "claude -n sysop --resume 6d82ead5-2b7b-40e6-aa09-e90650247044")
+    }
+
+    /// The lane name comes from the board and is typed into a shell.
+    func testUnsafeLaneNameIsNeverTyped() {
+        for bad in ["x; rm -rf ~", "-n", "", "a b", "caf\u{00E9}", "lane\"quote"] {
+            XCTAssertEqual(ResumeCommand.forNewTab(cwd: "/r", sessionId: nil, lane: bad), "claude", bad)
+        }
+    }
+
     func testRecordedSessionWins() {
         let card = LaneCard(lane: "x", cwd: "/r", lastSessionId: "card-id")
         XCTAssertEqual(ResumeCommand.sessionId(forCwd: "/r", recorded: rec("t", "/r", "rec-id"), card: card), "rec-id")

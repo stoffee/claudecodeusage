@@ -86,12 +86,26 @@ public enum ResumeCommand {
     /// The id is typed into a shell, so only canonical lowercase UUIDs are
     /// accepted, which rules out shell metacharacters and flag-shaped values
     /// like "--print" that could be injected from a corrupted lane-tabs file.
-    public static func forNewTab(cwd: String?, sessionId: String?) -> String? {
+    public static func forNewTab(cwd: String?, sessionId: String?, lane: String? = nil) -> String? {
         guard cwd != nil else { return nil }
+        // Name the session after its lane (`-n`), and have a fresh one load the
+        // lane with the /resume skill. An unsafe lane name is left out entirely.
+        let name = lane.flatMap { isSafeLaneName($0) ? $0 : nil }
         if let id = sessionId, isResumableId(id) {
-            return "claude --resume \(id)"
+            return name.map { "claude -n \($0) --resume \(id)" } ?? "claude --resume \(id)"
         }
-        return "claude"
+        return name.map { "claude -n \($0) \"/resume \($0)\"" } ?? "claude"
+    }
+
+    /// A lane name comes from the board and is typed into a shell, so it must
+    /// be plain ASCII letters, digits, `_` and `-`, starting with a letter or
+    /// digit (never read as a flag). Every real seat name fits.
+    public static func isSafeLaneName(_ lane: String) -> Bool {
+        guard let first = lane.unicodeScalars.first,
+              first.isASCII, CharacterSet.alphanumerics.contains(first) else { return false }
+        return lane.unicodeScalars.allSatisfy {
+            $0.isASCII && (CharacterSet.alphanumerics.contains($0) || $0 == "_" || $0 == "-")
+        }
     }
 
     /// True only for a canonical lowercase UUID, the only shape that is safe

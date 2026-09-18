@@ -67,7 +67,8 @@ public struct LaunchPlan: Equatable, Sendable {
                                  sessionFileModified: (_ cwd: String, _ id: String) -> Date?,
                                  liveSessionIds: Set<String>,
                                  hooksInstalled: Bool,
-                                 now: Date) -> LaunchPlan {
+                                 now: Date,
+                                 lane: String? = nil) -> LaunchPlan {
         // A cwd that no longer exists (moved repo, stale card) counts as
         // unknown: claude must not start somewhere we guessed.
         guard let cwd = candidate, isDirectory(cwd) else {
@@ -75,7 +76,7 @@ public struct LaunchPlan: Equatable, Sendable {
         }
 
         func plain(_ note: String?) -> LaunchPlan {
-            LaunchPlan(cwd: cwd, command: ResumeCommand.forNewTab(cwd: cwd, sessionId: nil),
+            LaunchPlan(cwd: cwd, command: ResumeCommand.forNewTab(cwd: cwd, sessionId: nil, lane: lane),
                        record: Record(cwd: cwd, sessionId: nil), note: note)
         }
 
@@ -101,7 +102,7 @@ public struct LaunchPlan: Equatable, Sendable {
             return plain("not resuming \(short): it was active under 10 minutes ago and may still be running")
         }
 
-        return LaunchPlan(cwd: cwd, command: ResumeCommand.forNewTab(cwd: cwd, sessionId: id),
+        return LaunchPlan(cwd: cwd, command: ResumeCommand.forNewTab(cwd: cwd, sessionId: id, lane: lane),
                           record: Record(cwd: cwd, sessionId: id), note: nil)
     }
 }

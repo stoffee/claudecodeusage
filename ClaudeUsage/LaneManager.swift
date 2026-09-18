@@ -199,7 +199,8 @@ final class LaneManager: ObservableObject {
                         sessionFileModified: Self.sessionFileModified,
                         liveSessionIds: Self.liveSessionIds(in: sessionsDir),
                         hooksInstalled: hooksInstalled,
-                        now: Date())
+                        now: Date(),
+                        lane: lane.name)
                     // No usable folder: open nothing. A shell tab in ~ was useless
                     // (Stoaf, 2026-09-18); an honest note is better.
                     guard let cwd = plan.cwd else {
