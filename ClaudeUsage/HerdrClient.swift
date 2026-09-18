@@ -35,11 +35,15 @@ struct HerdrClient {
         let panesByTab: [String: [String]]
     }
 
-    /// Holds stderr bytes read on a background queue while stdout is read on
-    /// this thread, so neither pipe can fill up and block the other.
-    private final class StderrBox {
+    /// Bytes read from one pipe on a background queue. Written once by the
+    /// reader, read only after `drained` says the reader is done.
+    private final class PipeBox {
         var data = Data()
     }
+
+    /// A herdr call that has not exited by then is killed, so a hung herdr
+    /// can never hold a lane's `opening` guard forever.
+    static let timeout: TimeInterval = 10
 
     func tabs() throws -> [HerdrTab] { try snapshot().tabs }
 
@@ -117,24 +121,43 @@ struct HerdrClient {
         let err = Pipe()
         p.standardOutput = out
         p.standardError = err
+        let exited = DispatchSemaphore(value: 0)
+        p.terminationHandler = { _ in exited.signal() }
         try p.run()
 
-        // Both pipes must be drained at the same time: if herdr writes more
-        // than a pipe buffer to stderr while nobody is reading it, herdr
-        // blocks on that write and stdout is never closed, so a plain
-        // readDataToEndOfFile on stdout first would hang forever.
-        let stderrBox = StderrBox()
-        let stderrDone = DispatchGroup()
-        stderrDone.enter()
-        DispatchQueue.global(qos: .utility).async {
-            stderrBox.data = err.fileHandleForReading.readDataToEndOfFile()
-            stderrDone.leave()
+        // Both pipes are drained at the same time, each on its own queue: if
+        // herdr writes more than a pipe buffer to one while nobody reads it,
+        // herdr blocks on that write and never exits.
+        let outBox = PipeBox()
+        let errBox = PipeBox()
+        let drained = DispatchGroup()
+        for (pipe, box) in [(out, outBox), (err, errBox)] {
+            drained.enter()
+            DispatchQueue.global(qos: .utility).async {
+                box.data = pipe.fileHandleForReading.readDataToEndOfFile()
+                drained.leave()
+            }
         }
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        stderrDone.wait()
+
+        if exited.wait(timeout: .now() + Self.timeout) == .timedOut {
+            // SIGTERM, then SIGKILL if herdr ignores it. Once it is dead its
+            // ends of the pipes close and both drains finish on their own.
+            p.terminate()
+            if exited.wait(timeout: .now() + 2) == .timedOut {
+                kill(p.processIdentifier, SIGKILL)
+                exited.wait()
+            }
+            _ = drained.wait(timeout: .now() + 2)
+            throw HerdrError.failed("timed out")
+        }
+        // herdr has exited, so EOF is due on both pipes. The wait is still
+        // bounded: a leftover child holding a pipe open must not hang us.
+        guard drained.wait(timeout: .now() + 2) == .success else {
+            throw HerdrError.failed("timed out")
+        }
+        let data = outBox.data
         guard p.terminationStatus == 0 else {
-            let msg = String(data: stderrBox.data, encoding: .utf8) ?? ""
+            let msg = String(data: errBox.data, encoding: .utf8) ?? ""
             throw HerdrError.failed(msg.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         return data
