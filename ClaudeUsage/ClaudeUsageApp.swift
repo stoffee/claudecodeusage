@@ -98,7 +98,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func startFetching() {
-        // Initial fetch and update check
+        // Initial fetch
         Task {
             // If system recently booted (within 60 seconds), wait before accessing keychain
             // The keychain/login system takes time to be fully available after boot
@@ -109,9 +109,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             }
 
             await usageManager.refresh()
+
+            // Off by default — see UsageManager.autoUpdateCheckEnabled. Flipping
+            // it on is how we approve pulling releases from our own fork.
+            if UsageManager.autoUpdateCheckEnabled {
+                await usageManager.checkForUpdates()
+            }
         }
 
-        // Refresh every 5 minutes (usage + sessions)
+        // Refresh every 5 minutes
         timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.usageManager.refresh()

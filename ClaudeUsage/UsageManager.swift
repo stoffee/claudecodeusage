@@ -72,7 +72,14 @@ class UsageManager: ObservableObject {
     @Published var updateDownloadURL: URL?
 
     static let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
-    static let githubRepo = "richhickson/claudecodeusage"
+    /// Our fork, never upstream. Pointing this at richhickson/claudecodeusage
+    /// would offer their build as an "update" and overwrite this fork —
+    /// themes, gauge styles, overage mode and the token estimate all gone.
+    static let githubRepo = "stoffee/claudecodeusage"
+
+    /// Update checks are opt-in, and opting in is a code change we make
+    /// deliberately. Nothing reaches out to GitHub while this is false.
+    static let autoUpdateCheckEnabled = false
     static let claudeCodeVersion: String = {
         // Detect installed Claude Code version for User-Agent
         let process = Process()
