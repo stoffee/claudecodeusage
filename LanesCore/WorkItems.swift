@@ -36,8 +36,8 @@ public enum WorkItems {
     /// Value of a `KEY: value` line, trimmed. nil when absent or empty.
     static func field(_ key: String, in body: String) -> String? {
         let prefix = key + ":"
-        for line in body.split(separator: "\n") where line.hasPrefix(prefix) {
-            let value = line.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces)
+        for line in body.split(whereSeparator: \.isNewline) where line.hasPrefix(prefix) {
+            let value = line.dropFirst(prefix.count).trimmingCharacters(in: .whitespacesAndNewlines)
             return value.isEmpty ? nil : value
         }
         return nil

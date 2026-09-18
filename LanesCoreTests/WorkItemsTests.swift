@@ -58,4 +58,10 @@ final class WorkItemsTests: XCTestCase {
     func testRejectsNonThread() {
         XCTAssertThrowsError(try WorkItems.openCounts(Data(#"{"agents":[]}"#.utf8)))
     }
+
+    /// Posts written on Windows arrive with CRLF line endings.
+    func testCRLFBodyIsCounted() throws {
+        let d = thread([post(1, "WORK: a\r\nLANE: speedy\r\nSTATE: open\r\n")])
+        XCTAssertEqual(try WorkItems.openCounts(d), ["speedy": 1])
+    }
 }
