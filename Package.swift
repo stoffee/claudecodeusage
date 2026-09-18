@@ -24,7 +24,8 @@ let package = Package(
         .executableTarget(
             name: "ClaudeUsage",
             dependencies: ["LanesCore"],
-            path: "ClaudeUsage"
+            path: "ClaudeUsage",
+            exclude: ["Info.plist"]
         ),
         .executableTarget(
             name: "BobUsage",

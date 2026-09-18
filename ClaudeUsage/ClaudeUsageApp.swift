@@ -24,6 +24,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     var sessionMonitor = SessionMonitor()
     var statusMonitor = StatusMonitor()
     var updateInstaller = UpdateInstaller()
+    lazy var laneManager = LaneManager(sessionMonitor: sessionMonitor)
     var timer: Timer?
     var cancellables = Set<AnyCancellable>()
 
@@ -109,6 +110,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             }
 
             await usageManager.refresh()
+            await laneManager.refresh(force: true)
 
             // Off by default, see UsageManager.autoUpdateCheckEnabled. Flipping
             // it on is how we approve pulling releases from our own fork.
@@ -121,6 +123,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.usageManager.refresh()
+                await self?.laneManager.refresh(force: true)
             }
         }
     }
@@ -144,7 +147,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 manager: usageManager,
                 sessionMonitor: sessionMonitor,
                 statusMonitor: statusMonitor,
-                updateInstaller: updateInstaller
+                updateInstaller: updateInstaller,
+                laneManager: laneManager
             )
         )
     }
@@ -252,6 +256,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         if popover.isShown {
             popover.performClose(nil)
         } else {
+            Task { await laneManager.refresh() }
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
 
             // Bring to front

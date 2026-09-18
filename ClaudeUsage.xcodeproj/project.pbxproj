@@ -21,6 +21,8 @@
 		018 /* LaneCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 119 /* LaneCard.swift */; };
 		013 /* TabResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 114 /* TabResolver.swift */; };
 		014 /* LaneTabStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115 /* LaneTabStore.swift */; };
+		015 /* BoardClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 116 /* BoardClient.swift */; };
+		017 /* LaneManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 118 /* LaneManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +42,8 @@
 		119 /* LaneCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LaneCard.swift; path = LanesCore/LaneCard.swift; sourceTree = SOURCE_ROOT; };
 		114 /* TabResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TabResolver.swift; path = LanesCore/TabResolver.swift; sourceTree = SOURCE_ROOT; };
 		115 /* LaneTabStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LaneTabStore.swift; path = LanesCore/LaneTabStore.swift; sourceTree = SOURCE_ROOT; };
+		116 /* BoardClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardClient.swift; sourceTree = "<group>"; };
+		118 /* LaneManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaneManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -77,6 +81,8 @@
 				119 /* LaneCard.swift */,
 				114 /* TabResolver.swift */,
 				115 /* LaneTabStore.swift */,
+				116 /* BoardClient.swift */,
+				118 /* LaneManager.swift */,
 				104 /* Assets.xcassets */,
 				105 /* ClaudeUsage.entitlements */,
 			);
@@ -173,6 +179,8 @@
 				018 /* LaneCard.swift in Sources */,
 				013 /* TabResolver.swift in Sources */,
 				014 /* LaneTabStore.swift in Sources */,
+				015 /* BoardClient.swift in Sources */,
+				017 /* LaneManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -309,6 +317,7 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ClaudeUsage/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Claude Usage";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -338,6 +347,7 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ClaudeUsage/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Claude Usage";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_LSUIElement = YES;

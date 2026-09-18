@@ -1,6 +1,9 @@
 import SwiftUI
 import AppKit
 import ServiceManagement
+#if canImport(LanesCore)
+import LanesCore
+#endif
 
 // MARK: - Gauge Style
 
@@ -218,6 +221,7 @@ struct UsageView: View {
     @ObservedObject var sessionMonitor: SessionMonitor
     @ObservedObject var statusMonitor: StatusMonitor
     @ObservedObject var updateInstaller: UpdateInstaller
+    @ObservedObject var laneManager: LaneManager
     @Environment(\.openURL) var openURL
     @AppStorage("appTheme") private var selectedTheme: String = AppTheme.standard.rawValue
     private var theme: AppTheme { AppTheme(rawValue: selectedTheme) ?? .standard }
@@ -288,6 +292,9 @@ struct UsageView: View {
             sessionsSection()
             Divider()
         }
+
+        lanesSection()
+        Divider()
 
         if let error = manager.error {
             errorView(error)
@@ -415,6 +422,49 @@ struct UsageView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Jump to this session's terminal window")
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    func lanesSection() -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("LANES")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(theme.secondaryText)
+                Spacer()
+                if let at = laneManager.cachedAt {
+                    // Spec D4: cached data is labelled, never passed off as live.
+                    Text("lane data cached \(at.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                }
+            }
+
+            if laneManager.unavailable {
+                Text("Board unreachable and no cached lane data")
+                    .font(.caption)
+                    .foregroundColor(theme.secondaryText)
+            } else {
+                ScrollView {
+                    VStack(spacing: 2) {
+                        ForEach(laneManager.lanes) { lane in
+                            LaneRow(lane: lane, theme: theme) { }
+                        }
+                    }
+                }
+                .frame(maxHeight: 200)
+            }
+
+            if let err = laneManager.lastError {
+                Text(err)
+                    .font(.caption2)
+                    .foregroundColor(.red)
+                    .lineLimit(2)
             }
         }
         .padding(.horizontal)
@@ -1139,6 +1189,57 @@ struct LiquidGauge: View {
     .background(Color(red: 0.12, green: 0.03, blue: 0.18))
 }
 
+// MARK: - Lane Row
+
+struct LaneRow: View {
+    let lane: Lane
+    var theme: AppTheme = .standard
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 8) {
+                Text("○")
+                    .foregroundColor(theme.secondaryText)
+                Text(lane.name)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(theme.primaryText)
+                    .lineLimit(1)
+                Text(idleText)
+                    .font(.caption2)
+                    .foregroundColor(theme.secondaryText)
+                Spacer(minLength: 4)
+                Text(pathText)
+                    .font(.caption2)
+                    .foregroundColor(theme.secondaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text("\(lane.openItems) open")
+                    .font(.caption2)
+                    .monospacedDigit()
+                    .foregroundColor(lane.openItems > 0 ? theme.accent : theme.secondaryText)
+            }
+            .padding(.vertical, 3)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(lane.cwd == nil ? "No known repo path: opens a plain shell tab" : "Open in herdr")
+    }
+
+    private var idleText: String {
+        guard let seen = lane.lastSeen else { return "never" }
+        let days = Int(Date().timeIntervalSince(seen) / 86_400)
+        return days < 1 ? "today" : "idle \(days)d"
+    }
+
+    private var pathText: String {
+        guard let cwd = lane.cwd else { return "no path" }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return cwd.hasPrefix(home) ? "~" + cwd.dropFirst(home.count) : cwd
+    }
+}
+
 // MARK: - Token Stats Row
 
 func formatTokenCount(_ n: Int) -> String {
@@ -1209,10 +1310,12 @@ struct TokenStatsRow: View {
 }
 
 #Preview {
-    UsageView(
+    let sessionMonitor = SessionMonitor()
+    return UsageView(
         manager: UsageManager(),
-        sessionMonitor: SessionMonitor(),
+        sessionMonitor: sessionMonitor,
         statusMonitor: StatusMonitor(),
-        updateInstaller: UpdateInstaller()
+        updateInstaller: UpdateInstaller(),
+        laneManager: LaneManager(sessionMonitor: sessionMonitor)
     )
 }
