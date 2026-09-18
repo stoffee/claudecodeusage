@@ -33,6 +33,9 @@ final class LaneManager: ObservableObject {
     private let herdr = HerdrClient()
     /// Lane cards by lane, re-read on every refresh. Absent is normal.
     private(set) var cards: [String: LaneCard] = [:]
+    /// Lane folders from single-seat `.claude/bbs-agent` files, re-scanned on
+    /// every refresh. See `SeatFiles`.
+    private var seatFolders: [String: String] = [:]
     private var roster: [RosterSeat] = []
     private var openCounts: [String: Int] = [:]
     private var liveLanes: Set<String> = []
@@ -97,6 +100,7 @@ final class LaneManager: ObservableObject {
         openCountsKnown = parsedCounts != nil
         openCounts = parsedCounts ?? [:]
         cards = Self.loadCards()
+        seatFolders = await Task.detached(priority: .utility) { Self.scanSeatFolders() }.value
         // If either half is stale the list is; report the older timestamp.
         cachedAt = [rosterF, workF].compactMap { $0 }.filter(\.fromCache).map(\.at).min()
         rebuild()
@@ -113,8 +117,44 @@ final class LaneManager: ObservableObject {
         lanes = LaneList.dormant(roster: roster,
                                  openCounts: openCounts,
                                  recordedCwd: store.all().mapValues(\.cwd),
-                                 cardCwd: cards.compactMapValues(\.cwd),
+                                 // A lane card wins; a single-seat bbs-agent file
+                                 // fills in lanes that have no card.
+                                 cardCwd: cards.compactMapValues(\.cwd)
+                                    .merging(seatFolders) { card, _ in card },
                                  liveLanes: liveLanes)
+    }
+
+    /// Folders of every `.claude/bbs-agent` file under ~/git and the vault,
+    /// mapped by `SeatFiles.folders` (single-seat, unambiguous only). Walks at
+    /// most 6 levels and never descends into hidden or build directories.
+    nonisolated private static func scanSeatFolders() -> [String: String] {
+        let fm = FileManager.default
+        let home = fm.homeDirectoryForCurrentUser
+        let roots = [home.appendingPathComponent("git"),
+                     home.appendingPathComponent("Documents/obsidian/stoffee-stuff")]
+        let skip: Set<String> = ["node_modules", "build", "DerivedData", "Pods", "venv"]
+        var files: [(folder: String, contents: String)] = []
+        for root in roots {
+            guard let walker = fm.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey],
+                                             options: [.skipsPackageDescendants]) else { continue }
+            for case let url as URL in walker {
+                guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
+                let name = url.lastPathComponent
+                if name.hasPrefix(".") || skip.contains(name) || walker.level > 6 {
+                    walker.skipDescendants()
+                    continue
+                }
+                let seatFile = url.appendingPathComponent(".claude/bbs-agent")
+                if let contents = try? String(contentsOf: seatFile, encoding: .utf8) {
+                    files.append((folder: url.path, contents: contents))
+                }
+            }
+            // The root itself can hold a seat file too.
+            if let contents = try? String(contentsOf: root.appendingPathComponent(".claude/bbs-agent"), encoding: .utf8) {
+                files.append((folder: root.path, contents: contents))
+            }
+        }
+        return SeatFiles.folders(from: files)
     }
 
     /// `~/.claude/lanes/*.json`. Small files and few of them; unreadable cards,
@@ -160,9 +200,16 @@ final class LaneManager: ObservableObject {
                         liveSessionIds: Self.liveSessionIds(in: sessionsDir),
                         hooksInstalled: hooksInstalled,
                         now: Date())
-                    // No usable path: a plain shell tab in ~, and claude is NOT started.
-                    let home = FileManager.default.homeDirectoryForCurrentUser.path
-                    let created = try herdr.create(lane: lane.name, cwd: plan.cwd ?? home)
+                    // No usable folder: open nothing. A shell tab in ~ was useless
+                    // (Stoaf, 2026-09-18); an honest note is better.
+                    guard let cwd = plan.cwd else {
+                        let why = candidate.map { "folder \($0) no longer exists" }
+                            ?? "no known folder for \(lane.name)"
+                        await MainActor.run { self.lastError = why }
+                        await MainActor.run { _ = self.opening.remove(lane.name) }
+                        return
+                    }
+                    let created = try herdr.create(lane: lane.name, cwd: cwd)
                     if let r = plan.record {
                         // Only a real path is recorded, never the ~ fallback.
                         await MainActor.run {
