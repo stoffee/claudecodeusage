@@ -16,6 +16,7 @@
 		008 /* UpdateInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 109 /* UpdateInstaller.swift */; };
 		004 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 104 /* Assets.xcassets */; };
 		010 /* Roster.swift in Sources */ = {isa = PBXBuildFile; fileRef = 111 /* Roster.swift */; };
+		011 /* WorkItems.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112 /* WorkItems.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +31,7 @@
 		108 /* StatusMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusMonitor.swift; sourceTree = "<group>"; };
 		109 /* UpdateInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateInstaller.swift; sourceTree = "<group>"; };
 		111 /* Roster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Roster.swift; path = LanesCore/Roster.swift; sourceTree = SOURCE_ROOT; };
+		112 /* WorkItems.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WorkItems.swift; path = LanesCore/WorkItems.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -62,6 +64,7 @@
 				108 /* StatusMonitor.swift */,
 				109 /* UpdateInstaller.swift */,
 				111 /* Roster.swift */,
+				112 /* WorkItems.swift */,
 				104 /* Assets.xcassets */,
 				105 /* ClaudeUsage.entitlements */,
 			);
@@ -153,6 +156,7 @@
 				007 /* StatusMonitor.swift in Sources */,
 				008 /* UpdateInstaller.swift in Sources */,
 				010 /* Roster.swift in Sources */,
+				011 /* WorkItems.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
