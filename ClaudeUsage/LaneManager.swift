@@ -26,6 +26,7 @@ final class LaneManager: ObservableObject {
         .appendingPathComponent(".claude/claudeusage/lane-tabs.json"))
 
     private let board = BoardClient()
+    private let herdr = HerdrClient()
     /// Lane cards by lane, re-read on every refresh. Absent is normal.
     private(set) var cards: [String: LaneCard] = [:]
     private var roster: [RosterSeat] = []
@@ -110,5 +111,51 @@ final class LaneManager: ObservableObject {
             if let data = try? Data(contentsOf: f), let card = LaneCard.parse(data) { out[card.lane] = card }
         }
         return out
+    }
+
+    /// LANES-SPEC "Click behaviour" for a dormant lane: focus its tab if one
+    /// can be identified without guessing, otherwise create one and resume.
+    func open(_ lane: Lane) {
+        lastError = nil
+        let recorded = store.all()[lane.name]
+        let card = cards[lane.name]
+        let herdr = self.herdr
+        Task.detached {
+            do {
+                let action = TabResolver.resolve(lane: lane.name, recorded: recorded,
+                                                 tabs: try herdr.tabs(), fallbackCwd: lane.cwd)
+                switch action {
+                case .focus(let tabId):
+                    try herdr.focus(tabId: tabId)
+
+                case .create(let candidate):
+                    // A cwd that no longer exists on disk (moved repo, stale card)
+                    // counts as unknown: herdr would fail, and claude must not start
+                    // somewhere we guessed.
+                    var isDir: ObjCBool = false
+                    let cwd = candidate.flatMap {
+                        FileManager.default.fileExists(atPath: $0, isDirectory: &isDir) && isDir.boolValue ? $0 : nil
+                    }
+                    // No usable path: a plain shell tab in ~, and claude is NOT started.
+                    let home = FileManager.default.homeDirectoryForCurrentUser.path
+                    let created = try herdr.create(lane: lane.name, cwd: cwd ?? home)
+                    let sessionId = ResumeCommand.sessionId(forCwd: cwd, recorded: recorded, card: card)
+                    if let cwd {
+                        // Only a real path is recorded. Recording ~ would make it the
+                        // lane's cwd next time and start claude there.
+                        await MainActor.run {
+                            self.store.record(lane: lane.name, RecordedTab(
+                                tabId: created.tabId, cwd: cwd,
+                                sessionId: sessionId, recordedAt: Date()))
+                        }
+                    }
+                    if let command = ResumeCommand.forNewTab(cwd: cwd, sessionId: sessionId) {
+                        try herdr.runInShell(paneId: created.paneId, command: command)
+                    }
+                }
+            } catch {
+                await MainActor.run { self.lastError = error.localizedDescription }
+            }
+        }
     }
 }

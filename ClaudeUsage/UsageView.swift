@@ -460,7 +460,7 @@ struct UsageView: View {
                 ScrollView {
                     VStack(spacing: 2) {
                         ForEach(laneManager.lanes) { lane in
-                            LaneRow(lane: lane, theme: theme, countsKnown: laneManager.openCountsKnown) { }
+                            LaneRow(lane: lane, theme: theme, countsKnown: laneManager.openCountsKnown) { laneManager.open(lane) }
                         }
                     }
                 }

@@ -23,6 +23,7 @@
 		014 /* LaneTabStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115 /* LaneTabStore.swift */; };
 		015 /* BoardClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 116 /* BoardClient.swift */; };
 		017 /* LaneManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 118 /* LaneManager.swift */; };
+		016 /* HerdrClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 117 /* HerdrClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -44,6 +45,7 @@
 		115 /* LaneTabStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LaneTabStore.swift; path = LanesCore/LaneTabStore.swift; sourceTree = SOURCE_ROOT; };
 		116 /* BoardClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardClient.swift; sourceTree = "<group>"; };
 		118 /* LaneManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaneManager.swift; sourceTree = "<group>"; };
+		117 /* HerdrClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HerdrClient.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -83,6 +85,7 @@
 				115 /* LaneTabStore.swift */,
 				116 /* BoardClient.swift */,
 				118 /* LaneManager.swift */,
+				117 /* HerdrClient.swift */,
 				104 /* Assets.xcassets */,
 				105 /* ClaudeUsage.entitlements */,
 			);
@@ -181,6 +184,7 @@
 				014 /* LaneTabStore.swift in Sources */,
 				015 /* BoardClient.swift in Sources */,
 				017 /* LaneManager.swift in Sources */,
+				016 /* HerdrClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
