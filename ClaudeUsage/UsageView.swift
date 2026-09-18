@@ -472,7 +472,10 @@ struct UsageView: View {
                         }
                     }
                 }
-                .frame(maxHeight: 200)
+                // A fixed height, not maxHeight: as the only flexible view in the
+                // popover, a maxHeight list was squeezed to zero rows whenever the
+                // usage cards filled the space.
+                .frame(height: laneManager.lanes.isEmpty ? 0 : 180)
             }
 
             if let err = laneManager.boardError {

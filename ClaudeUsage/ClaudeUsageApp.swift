@@ -142,7 +142,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         popover = NSPopover()
         popover?.contentSize = NSSize(width: 340, height: 480)
         popover?.behavior = .transient
-        popover?.contentViewController = NSHostingController(
+        let hosting = NSHostingController(
             rootView: UsageView(
                 manager: usageManager,
                 sessionMonitor: sessionMonitor,
@@ -151,6 +151,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 laneManager: laneManager
             )
         )
+        // Size the popover to its content. The fixed 480pt height clipped the
+        // footer once the lanes section was added.
+        hosting.sizingOptions = .preferredContentSize
+        popover?.contentViewController = hosting
     }
 
     func updateStatusItem() {
