@@ -23,3 +23,7 @@ DerivedData/
 
 # Superpowers brainstorm mockups
 .superpowers/
+
+# Claude Code worktrees and subagent-driven-development scratch
+.claude/worktrees/
+.superpowers/
