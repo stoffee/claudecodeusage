@@ -34,6 +34,9 @@ final class LaneManager: ObservableObject {
     private var liveLanes: Set<String> = []
     private var lastFetch: Date?
     private var cancellables = Set<AnyCancellable>()
+    /// Lanes with an `open(_:)` in flight, so a double-click cannot resolve
+    /// twice and create two tabs that both resume the same session.
+    private var opening = Set<String>()
 
     init(sessionMonitor: SessionMonitor) {
         sessionMonitor.$sessions
@@ -116,6 +119,8 @@ final class LaneManager: ObservableObject {
     /// LANES-SPEC "Click behaviour" for a dormant lane: focus its tab if one
     /// can be identified without guessing, otherwise create one and resume.
     func open(_ lane: Lane) {
+        guard !opening.contains(lane.name) else { return }
+        opening.insert(lane.name)
         lastError = nil
         let recorded = store.all()[lane.name]
         let card = cards[lane.name]
@@ -156,6 +161,7 @@ final class LaneManager: ObservableObject {
             } catch {
                 await MainActor.run { self.lastError = error.localizedDescription }
             }
+            await MainActor.run { _ = self.opening.remove(lane.name) }
         }
     }
 }

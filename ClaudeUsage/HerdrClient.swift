@@ -35,6 +35,12 @@ struct HerdrClient {
         let panesByTab: [String: [String]]
     }
 
+    /// Holds stderr bytes read on a background queue while stdout is read on
+    /// this thread, so neither pipe can fill up and block the other.
+    private final class StderrBox {
+        var data = Data()
+    }
+
     func tabs() throws -> [HerdrTab] { try snapshot().tabs }
 
     func focus(tabId: String) throws {
@@ -112,10 +118,23 @@ struct HerdrClient {
         p.standardOutput = out
         p.standardError = err
         try p.run()
+
+        // Both pipes must be drained at the same time: if herdr writes more
+        // than a pipe buffer to stderr while nobody is reading it, herdr
+        // blocks on that write and stdout is never closed, so a plain
+        // readDataToEndOfFile on stdout first would hang forever.
+        let stderrBox = StderrBox()
+        let stderrDone = DispatchGroup()
+        stderrDone.enter()
+        DispatchQueue.global(qos: .utility).async {
+            stderrBox.data = err.fileHandleForReading.readDataToEndOfFile()
+            stderrDone.leave()
+        }
         let data = out.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()
+        stderrDone.wait()
         guard p.terminationStatus == 0 else {
-            let msg = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let msg = String(data: stderrBox.data, encoding: .utf8) ?? ""
             throw HerdrError.failed(msg.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         return data
