@@ -298,7 +298,7 @@ struct UsageView: View {
         }
     }
 
-    /// "4.2M / ~10.0M tokens (est., this Mac)" under the weekly gauge — nil
+    /// "4.2M / ~10.0M tokens (est., this Mac)" under the weekly gauge, or nil
     /// whenever the estimate would be untrustworthy or the local scan found
     /// nothing. See `UsageData.impliedWeeklyBudget`.
     func weeklyTokenFootnote(_ usage: UsageData) -> String? {

@@ -73,7 +73,7 @@ class UsageManager: ObservableObject {
 
     static let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
     /// Our fork, never upstream. Pointing this at richhickson/claudecodeusage
-    /// would offer their build as an "update" and overwrite this fork —
+    /// would offer their build as an "update" and overwrite this fork:
     /// themes, gauge styles, overage mode and the token estimate all gone.
     static let githubRepo = "stoffee/claudecodeusage"
 
@@ -251,7 +251,7 @@ class UsageManager: ObservableObject {
                     if let lastCached = lastCachedDate,
                        let modDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate {
                         // The cache covers this file, but a stale cache must not
-                        // hide entries inside the rolling window — windowTokens is
+                        // hide entries inside the rolling window. windowTokens is
                         // summed from exact timestamps and has no cache to fall
                         // back on.
                         let couldHoldWindowEntries = windowStart.map { modDate >= $0 } ?? false

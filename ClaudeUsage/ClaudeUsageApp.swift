@@ -110,7 +110,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
             await usageManager.refresh()
 
-            // Off by default — see UsageManager.autoUpdateCheckEnabled. Flipping
+            // Off by default, see UsageManager.autoUpdateCheckEnabled. Flipping
             // it on is how we approve pulling releases from our own fork.
             if UsageManager.autoUpdateCheckEnabled {
                 await usageManager.checkForUpdates()
