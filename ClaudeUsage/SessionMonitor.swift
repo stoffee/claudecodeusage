@@ -463,17 +463,6 @@ class SessionMonitor: ObservableObject {
     CWD=$(get_field cwd)
     MSG=""
 
-    # Lane (LANES-SPEC): RECORDED, never inferred. First hit wins.
-    #  1. $BBS_AGENT, set per tab by `herdr tab create --env`. Authoritative.
-    #  2. <cwd>/.claude/bbs-agent, but ONLY when it names exactly one seat.
-    #  3. Several seats in that file: a hook cannot ask, so no lane.
-    #  4. Nothing: no lane. The session still shows, unlabelled.
-    LANE="${BBS_AGENT:-}"
-    if [ -z "$LANE" ] && [ -n "$CWD" ] && [ -f "$CWD/.claude/bbs-agent" ]; then
-      SEATS=$(sed 's/#.*//' "$CWD/.claude/bbs-agent" | tr -d '[:blank:]\r' | grep -v '^$' || true)
-      if [ "$(printf '%s\n' "$SEATS" | grep -c . || true)" -eq 1 ]; then LANE=$SEATS; fi
-    fi
-
     [ -n "$SID" ] || exit 0
     FILE="$DIR/$SID.json"
 
@@ -484,6 +473,17 @@ class SessionMonitor: ObservableObject {
       Stop) STATUS="finished" ;;
       *) exit 0 ;;
     esac
+
+    # Lane (LANES-SPEC): RECORDED, never inferred. First hit wins.
+    #  1. $BBS_AGENT, set per tab by `herdr tab create --env`. Authoritative.
+    #  2. <cwd>/.claude/bbs-agent, but ONLY when it names exactly one seat.
+    #  3. Several seats in that file: a hook cannot ask, so no lane.
+    #  4. Nothing: no lane. The session still shows, unlabelled.
+    LANE="${BBS_AGENT:-}"
+    if [ -z "$LANE" ] && [ -n "$CWD" ] && [ -f "$CWD/.claude/bbs-agent" ]; then
+      SEATS=$(sed 's/#.*//' "$CWD/.claude/bbs-agent" | tr -d '[:blank:]\r' | grep -v '^$' || true)
+      if [ "$(printf '%s\n' "$SEATS" | grep -c . || true)" -eq 1 ]; then LANE=$SEATS; fi
+    fi
 
     esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 

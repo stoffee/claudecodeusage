@@ -452,6 +452,14 @@ struct UsageView: View {
                     .foregroundColor(.orange)
             }
 
+            if !sessionMonitor.hooksInstalled {
+                // LaunchPlan refuses every resume without hooks; say so up front.
+                Text("Session hooks are off: live lanes can't be detected, so resume is disabled.")
+                    .font(.caption2)
+                    .foregroundColor(theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             if laneManager.unavailable {
                 Text("Board unreachable and no cached lane data")
                     .font(.caption)

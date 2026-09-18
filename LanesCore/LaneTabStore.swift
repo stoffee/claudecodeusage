@@ -36,7 +36,7 @@ public final class LaneTabStore {
         do {
             data = try enc.encode(map)
         } catch {
-            Self.logger.error("lane-tabs write failed: \(error.localizedDescription)")
+            Self.logger.error("lane-tabs write failed: \(error.localizedDescription, privacy: .public)")
             return
         }
 
@@ -44,14 +44,14 @@ public final class LaneTabStore {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                      withIntermediateDirectories: true)
         } catch {
-            Self.logger.error("lane-tabs write failed: \(error.localizedDescription)")
+            Self.logger.error("lane-tabs write failed: \(error.localizedDescription, privacy: .public)")
             return
         }
 
         do {
             try data.write(to: url, options: .atomic)
         } catch {
-            Self.logger.error("lane-tabs write failed: \(error.localizedDescription)")
+            Self.logger.error("lane-tabs write failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

@@ -13,8 +13,8 @@ final class LaneManager: ObservableObject {
     @Published private(set) var cachedAt: Date?
     /// Board unreachable AND nothing cached.
     @Published private(set) var unavailable = false
-    /// False when the work thread could not be loaded, live or cached, this
-    /// refresh. `openCounts` is then empty, and every lane's count must read
+    /// False when the work thread could not be loaded or parsed, live or
+    /// cached, this refresh. `openCounts` is then empty, and every lane's count must read
     /// as unknown rather than "0 open" as if that were live data (spec D4).
     @Published private(set) var openCountsKnown = true
     /// Reason the most recent refresh served cached or missing data, for
@@ -90,8 +90,12 @@ final class LaneManager: ObservableObject {
         }
         unavailable = false
         roster = seats
-        openCountsKnown = workF != nil
-        openCounts = workF.flatMap { try? WorkItems.openCounts($0.data) } ?? [:]
+        // Known only when the counts actually parsed: a work fetch that came
+        // back but does not parse (a truncated or wrong-typed cache) is
+        // unknown, not "0 open".
+        let parsedCounts = workF.flatMap { try? WorkItems.openCounts($0.data) }
+        openCountsKnown = parsedCounts != nil
+        openCounts = parsedCounts ?? [:]
         cards = Self.loadCards()
         // If either half is stale the list is; report the older timestamp.
         cachedAt = [rosterF, workF].compactMap { $0 }.filter(\.fromCache).map(\.at).min()
