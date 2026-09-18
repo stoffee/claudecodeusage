@@ -21,7 +21,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     var popover: NSPopover?
     var settingsWindow: NSWindow?
     var usageManager = UsageManager()
-    var sessionManager = SessionManager()
     var sessionMonitor = SessionMonitor()
     var statusMonitor = StatusMonitor()
     var updateInstaller = UpdateInstaller()
@@ -116,7 +115,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.usageManager.refresh()
-                self?.sessionManager.loadSessions()
             }
         }
     }
@@ -138,7 +136,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         popover?.contentViewController = NSHostingController(
             rootView: UsageView(
                 manager: usageManager,
-                sessionManager: sessionManager,
                 sessionMonitor: sessionMonitor,
                 statusMonitor: statusMonitor,
                 updateInstaller: updateInstaller
@@ -249,9 +246,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         if popover.isShown {
             popover.performClose(nil)
         } else {
-            // Refresh sessions each time the popover opens (lightweight local I/O)
-            sessionManager.loadSessions()
-
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
 
             // Bring to front

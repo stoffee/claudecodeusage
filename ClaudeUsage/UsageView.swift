@@ -2,11 +2,6 @@ import SwiftUI
 import AppKit
 import ServiceManagement
 
-enum AppTab: String, CaseIterable {
-    case usage = "Usage"
-    case sessions = "Sessions"
-}
-
 // MARK: - Gauge Style
 
 enum GaugeStyle: String, CaseIterable, Identifiable {
@@ -220,13 +215,10 @@ enum AppTheme: String, CaseIterable {
 
 struct UsageView: View {
     @ObservedObject var manager: UsageManager
-    @ObservedObject var sessionManager: SessionManager
     @ObservedObject var sessionMonitor: SessionMonitor
     @ObservedObject var statusMonitor: StatusMonitor
     @ObservedObject var updateInstaller: UpdateInstaller
     @Environment(\.openURL) var openURL
-    @State private var selectedTab: AppTab = .usage
-    @State private var sessionSearchText: String = ""
     @AppStorage("appTheme") private var selectedTheme: String = AppTheme.standard.rawValue
     private var theme: AppTheme { AppTheme(rawValue: selectedTheme) ?? .standard }
     @AppStorage("gaugeStyleOverride") private var gaugeOverride: String = ""
@@ -256,7 +248,7 @@ struct UsageView: View {
                     .foregroundColor(theme.secondaryText)
                 Spacer()
 
-                if manager.isLoading || sessionManager.isLoading {
+                if manager.isLoading {
                     ProgressView()
                         .scaleEffect(0.7)
                 }
@@ -269,37 +261,9 @@ struct UsageView: View {
                 updateBanner(newVersion)
             }
 
-            // Tab picker — custom so Stoffee theme colors apply
-            HStack(spacing: 0) {
-                ForEach(AppTab.allCases, id: \.self) { tab in
-                    Button(action: { selectedTab = tab }) {
-                        Text(tab.rawValue)
-                            .font(.subheadline)
-                            .fontWeight(selectedTab == tab ? .semibold : .regular)
-                            .foregroundColor(selectedTab == tab ? .white : theme.secondaryText)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                            .background(selectedTab == tab ? theme.accent : Color.clear)
-                            .cornerRadius(6)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(3)
-            .background(theme.barTrack)
-            .cornerRadius(8)
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-
             Divider()
 
-            // Tab content
-            switch selectedTab {
-            case .usage:
-                usageTabContent()
-            case .sessions:
-                sessionsTabContent()
-            }
+            usageTabContent()
 
             Divider()
 
@@ -397,74 +361,6 @@ struct UsageView: View {
             }
         }
         .padding()
-    }
-
-    // MARK: - Sessions Tab
-
-    var filteredSessions: [SessionEntry] {
-        guard !sessionSearchText.isEmpty else { return sessionManager.sessions }
-        let query = sessionSearchText.lowercased()
-        return sessionManager.sessions.filter { session in
-            session.displayTitle.lowercased().contains(query) ||
-            session.shortProjectName.lowercased().contains(query) ||
-            (session.branchDisplay?.lowercased().contains(query) ?? false) ||
-            session.searchBlob.contains(query)
-        }
-    }
-
-    @ViewBuilder
-    func sessionsTabContent() -> some View {
-        VStack(spacing: 0) {
-            // Search field
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(theme.secondaryText)
-                TextField("Search sessions...", text: $sessionSearchText)
-                    .textFieldStyle(.plain)
-                    .font(.subheadline)
-                    .foregroundColor(theme.primaryText)
-                if !sessionSearchText.isEmpty {
-                    Button(action: { sessionSearchText = "" }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(theme.secondaryText)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(8)
-            .background(theme.searchBackground)
-            .cornerRadius(8)
-            .padding(.horizontal)
-            .padding(.vertical, 6)
-
-            if filteredSessions.isEmpty && !sessionManager.isLoading {
-                VStack(spacing: 12) {
-                    Image(systemName: sessionSearchText.isEmpty ? "tray" : "magnifyingglass")
-                        .font(.largeTitle)
-                        .foregroundColor(theme.secondaryText)
-                    Text(sessionSearchText.isEmpty ? "No sessions found" : "No matching sessions")
-                        .font(.subheadline)
-                        .foregroundColor(theme.secondaryText)
-                }
-                .padding()
-                .frame(maxWidth: .infinity, minHeight: 180)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        ForEach(filteredSessions) { session in
-                            SessionRow(session: session, theme: theme, onTap: {
-                                sessionManager.resumeSession(session)
-                            }, onDelete: {
-                                sessionManager.deleteSession(session)
-                            })
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
-                }
-                .frame(minHeight: 180, maxHeight: 300)
-            }
-        }
     }
 
     // MARK: - Error / Loading
@@ -818,14 +714,13 @@ struct UsageView: View {
                 Spacer()
 
                 Button(action: {
-                    sessionManager.loadSessions()
                     Task { await manager.refresh() }
                 }) {
                     Image(systemName: "arrow.clockwise")
                         .foregroundColor(theme.secondaryText)
                 }
                 .buttonStyle(.borderless)
-                .disabled(manager.isLoading && sessionManager.isLoading)
+                .disabled(manager.isLoading)
 
                 Button(action: {
                     openURL(URL(string: "https://claude.ai")!)
@@ -912,86 +807,6 @@ struct UsageView: View {
 }
 
 // MARK: - Session Row
-
-struct SessionRow: View {
-    let session: SessionEntry
-    var theme: AppTheme = .standard
-    let onTap: () -> Void
-    let onDelete: () -> Void
-
-    var body: some View {
-        HStack(spacing: 0) {
-            // Delete button
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-                    .font(.caption)
-                    .foregroundColor(theme.secondaryText)
-                    .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.plain)
-            .help("Delete session")
-
-            // Session card (clickable)
-            Button(action: onTap) {
-                VStack(alignment: .leading, spacing: 4) {
-                    // Named sessions: show name bold, first prompt as subtitle
-                    if session.hasCustomName {
-                        Text(session.displayTitle)
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .lineLimit(1)
-                            .foregroundColor(theme.accent)
-                        if !session.firstPrompt.isEmpty {
-                            Text(session.firstPrompt)
-                                .font(.caption)
-                                .lineLimit(1)
-                                .foregroundColor(theme.secondaryText)
-                        }
-                    } else {
-                        Text(session.displayTitle)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .lineLimit(2)
-                            .foregroundColor(theme.primaryText)
-                    }
-
-                    HStack(spacing: 8) {
-                        Label(session.shortProjectName, systemImage: "folder")
-                            .font(.caption)
-                            .foregroundColor(theme.secondaryText)
-                            .lineLimit(1)
-
-                        if let branch = session.branchDisplay {
-                            Label(branch, systemImage: "arrow.triangle.branch")
-                                .font(.caption)
-                                .foregroundColor(theme.secondaryText)
-                                .lineLimit(1)
-                        }
-
-                        Spacer()
-
-                        if session.messageCount > 0 {
-                            Label("\(session.messageCount)", systemImage: "message")
-                                .font(.caption)
-                                .foregroundColor(theme.secondaryText)
-                        }
-                    }
-
-                    if !session.relativeModified.isEmpty {
-                        Text(session.relativeModified)
-                            .font(.caption2)
-                            .foregroundColor(theme.secondaryText.opacity(0.7))
-                    }
-                }
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
-        }
-        .background(theme.cardBackground)
-        .cornerRadius(8)
-    }
-}
 
 // MARK: - Usage Row
 
@@ -1376,7 +1191,6 @@ struct TokenStatsRow: View {
 #Preview {
     UsageView(
         manager: UsageManager(),
-        sessionManager: SessionManager(),
         sessionMonitor: SessionMonitor(),
         statusMonitor: StatusMonitor(),
         updateInstaller: UpdateInstaller()
