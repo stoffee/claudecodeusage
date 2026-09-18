@@ -22,8 +22,12 @@ final class LaneManager: ObservableObject {
     @Published private(set) var boardError: String?
     @Published var lastError: String?
 
-    let store = LaneTabStore(url: FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".claude/claudeusage/lane-tabs.json"))
+    /// Lanes data lives in its own directory, NOT ~/.claude/claudeusage:
+    /// SessionMonitor.uninstallHooks deletes that whole directory.
+    static let dataDir = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".claude/claudeusage-lanes", isDirectory: true)
+
+    let store = LaneTabStore(url: LaneManager.dataDir.appendingPathComponent("lane-tabs.json"))
 
     private let board = BoardClient()
     private let herdr = HerdrClient()

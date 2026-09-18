@@ -25,8 +25,10 @@ struct BoardClient {
         let fallbackNote: String?
     }
 
+    /// Outside ~/.claude/claudeusage, which SessionMonitor.uninstallHooks
+    /// deletes whole.
     static let cacheDir = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".claude/claudeusage/board-cache", isDirectory: true)
+        .appendingPathComponent(".claude/claudeusage-lanes/board-cache", isDirectory: true)
 
     private let session: URLSession = {
         let c = URLSessionConfiguration.ephemeral
